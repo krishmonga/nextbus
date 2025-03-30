@@ -6,6 +6,8 @@ import authroutes from "./routes/authroutes.js";
 import busroutes from "./routes/busroutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
 import protect from "./middleware/authmiddleware.js";
+import errorHandler from "./middleware/errorMiddleware.js";
+
 import Booking from "./models/Booking.js";
 
 dotenv.config();
@@ -18,6 +20,8 @@ app.use("/api/auth", authroutes);
 app.use("/api/buses", busroutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/bookings", protect, bookingRoutes); 
+app.use(errorHandler);
+
 
 app.get("/", (req, res) => {
   res.send("API is running...");

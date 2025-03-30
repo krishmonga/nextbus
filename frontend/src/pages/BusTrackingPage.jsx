@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import BusFeedbackForm from './BusFeedbackForm'; // Import the feedback form
 
 const busOperators = [
   { id: 'hrtc', name: 'HRTC', color: '#34D399' },  // Green for HRTC
@@ -107,6 +108,8 @@ const BusTrackingPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingBus, setBookingBus] = useState(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false); // State for feedback modal
+  const [feedbackBus, setFeedbackBus] = useState(null); // State for the bus being reviewed
 
   const handleTrackBus = (bus) => {
     // Navigate to the Map page with bus data
@@ -121,6 +124,17 @@ const BusTrackingPage = () => {
   const closeBookingModal = () => {
     setShowBookingModal(false);
     setBookingBus(null);
+  };
+
+  const handleOpenFeedbackModal = (bus) => {
+    console.log('Opening feedback modal for bus:', bus); 
+    setFeedbackBus(bus); // Set the selected bus
+    setShowFeedbackModal(true); // Show the modal
+  };
+
+  const closeFeedbackModal = () => {
+    setShowFeedbackModal(false);  
+    setFeedbackBus(null); 
   };
 
   const filteredBuses = busRoutes.filter(bus => {
@@ -201,6 +215,12 @@ const BusTrackingPage = () => {
                   onClick={() => handleBookBus(bus)}
                 >
                   Book Bus
+                </button>
+                <button
+                  className="flex-1 px-4 py-2 font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition-all duration-300 shadow-md hover:shadow-yellow-400/50"
+                  onClick={() => handleOpenFeedbackModal(bus)}
+                >
+                  Feedback
                 </button>
               </div>
             </div>
@@ -330,7 +350,7 @@ const BusTrackingPage = () => {
                   className="px-4 py-2 font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-300 shadow-md hover:shadow-green-400/50 flex-1"
                   onClick={closeBookingModal}
                 >
-                  Book Now
+                  Book a Bus 
                 </button>
                 <button
                   type="button"
@@ -341,6 +361,39 @@ const BusTrackingPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Modal */}
+      {showFeedbackModal && feedbackBus && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                Feedback for {feedbackBus.name}
+              </h3>
+              <button
+                onClick={closeFeedbackModal}
+                className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  ></path>
+                </svg>
+              </button>
+            </div>
+            <BusFeedbackForm onClose={closeFeedbackModal} feedbackBus={feedbackBus} />
           </div>
         </div>
       )}
