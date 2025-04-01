@@ -1,139 +1,109 @@
 import Booking from "../models/Booking.js";
 import Bus from "../models/Bus.js";
-import mongoose from "mongoose";
 
-// Constants
-const MIN_SEAT_NUMBER = 1;
-
-// Book a bus
+// Create new booking
 export const bookBus = async (req, res) => {
-  const { busId, seatNumber, date } = req.body;
-  const userId = req.user.id;
-
   try {
-    // Validate busId
-    if (!mongoose.Types.ObjectId.isValid(busId)) {
-      return res.status(400).json({ message: "Invalid bus ID" });
-    }
+    const { busId, seatNumber, travelDate } = req.body;
+    const userId = req.user.id;
 
-    // Check if the bus exists
+    // Check bus availability
     const bus = await Bus.findById(busId);
     if (!bus) {
       return res.status(404).json({ message: "Bus not found" });
     }
 
-    // Validate seat number
-    if (seatNumber < MIN_SEAT_NUMBER || seatNumber > bus.totalSeats) {
-      return res.status(400).json({ message: "Invalid seat number" });
-    }
+    // Check if seat is already booked
+    const existingBooking = await Booking.findOne({
+      bus: busId,
+      seatNumber,
+      travelDate
+    });
 
-    // Validate booking date
-    const bookingDate = new Date(date);
-    const currentDate = new Date();
-    if (bookingDate < currentDate) {
-      return res.status(400).json({ message: "Booking date cannot be in the past" });
-    }
-
-    // Check if the seat is already booked
-    const seatTaken = await Booking.findOne({ bus: busId, seatNumber, date });
-    if (seatTaken) {
+    if (existingBooking) {
       return res.status(400).json({ message: "Seat already booked" });
     }
 
-    // Create a new booking
-    const booking = new Booking({
+    // Create booking
+    const booking = await Booking.create({
       user: userId,
       bus: busId,
       seatNumber,
-      date,
+      travelDate,
+      status: "confirmed"
     });
 
-    await booking.save();
-    res.status(201).json({ message: "Bus booked successfully", booking });
+    res.status(201).json(booking);
   } catch (error) {
-    console.error("Error booking bus:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
-// Get all bookings for the logged-in user
+// Get user bookings
 export const getUserBookings = async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
-
   try {
     const bookings = await Booking.find({ user: req.user.id })
-      .populate("bus")
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Booking.countDocuments({ user: req.user.id });
-
-    res.status(200).json({
-      bookings,
-      total,
-      page,
-      pages: Math.ceil(total / limit),
-    });
+      .populate('bus', 'busNumber capacity type');
+    res.status(200).json(bookings);
   } catch (error) {
-    console.error("Error fetching user bookings:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
-// Check seat availability
-export const checkSeatAvailability = async (req, res) => {
-  const { busId, date } = req.query;
-
+// Get booking details
+export const getBookingDetails = async (req, res) => {
   try {
-    // Validate busId
-    if (!mongoose.Types.ObjectId.isValid(busId)) {
-      return res.status(400).json({ message: "Invalid bus ID" });
-    }
+    const booking = await Booking.findById(req.params.id)
+      .populate('user', 'name email')
+      .populate('bus', 'busNumber capacity type route');
 
-    // Check if the bus exists
-    const bus = await Bus.findById(busId);
-    if (!bus) {
-      return res.status(404).json({ message: "Bus not found" });
-    }
-
-    // Get booked seats for the given date
-    const bookedSeats = await Booking.find({ bus: busId, date }).select("seatNumber");
-
-    // Calculate available seats
-    const availableSeats = Array.from({ length: bus.totalSeats }, (_, i) => i + 1).filter(
-      (seat) => !bookedSeats.some((booked) => booked.seatNumber === seat)
-    );
-
-    res.status(200).json({ availableSeats });
-  } catch (error) {
-    console.error("Error checking seat availability:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-};
-
-// Cancel a booking
-export const cancelBooking = async (req, res) => {
-  const { bookingId } = req.params;
-  const userId = req.user.id;
-
-  try {
-    // Validate bookingId
-    if (!mongoose.Types.ObjectId.isValid(bookingId)) {
-      return res.status(400).json({ message: "Invalid booking ID" });
-    }
-
-    // Find and delete the booking
-    const booking = await Booking.findOne({ _id: bookingId, user: userId });
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
 
-    await Booking.deleteOne({ _id: bookingId });
-    res.status(200).json({ message: "Booking canceled successfully" });
+    // Check if user owns the booking or is admin
+    if (booking.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    res.status(200).json(booking);
   } catch (error) {
-    console.error("Error canceling booking:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Cancel booking
+export const cancelBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    // Check if user owns the booking or is admin
+    if (booking.user.toString() !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    // Update booking status
+    booking.status = "cancelled";
+    await booking.save();
+
+    res.status(200).json({ message: "Booking cancelled successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Get all bookings (admin only)
+export const getAllBookings = async (req, res) => {
+  try {
+    const bookings = await Booking.find()
+      .populate('user', 'name email')
+      .populate('bus', 'busNumber capacity type');
+    res.status(200).json(bookings);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };

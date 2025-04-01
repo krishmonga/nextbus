@@ -5,10 +5,10 @@ import connectDB from "./config/db.js";
 import authroutes from "./routes/authroutes.js";
 import busroutes from "./routes/busroutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
-import protect from "./middleware/authmiddleware.js";
+import { protect, checkUserRole } from "./middleware/authMiddleware.js";
 import errorHandler from "./middleware/errorMiddleware.js";
 
-import Booking from "./models/Booking.js";
+import Booking from "./models/Booking.js";//need to be imported  
 
 dotenv.config();
 connectDB();

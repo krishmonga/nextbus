@@ -1,21 +1,27 @@
 import express from "express";
 import {
   getBuses,
+  getBusById,
   addBus,
-  checkSeatAvailability, 
+  updateBus,
+  deleteBus,
+  checkSeatAvailability
 } from "../controllers/buscontroller.js";  
-import protect from "../middleware/authmiddleware.js";
-
+import { protect, checkUserRole } from "../middleware/authMiddleware.js";
+import { validateBus } from "../middleware/validationMiddleware.js";
 
 const router = express.Router();
 
-// Route for fetching all buses
+// Public routes
 router.get("/", getBuses);
+router.get("/:id", getBusById);
 
-// Route for adding a new bus
-router.post("/", protect, addBus);
+// Protected routes
+router.get("/availability", protect, checkSeatAvailability);
 
-// Route for checking seat availability
-router.get("/availability", protect, checkSeatAvailability); 
+// Admin-only routes
+router.post("/", protect, checkUserRole('admin'), validateBus, addBus);
+router.put("/:id", protect, checkUserRole('admin'), validateBus, updateBus);
+router.delete("/:id", protect, checkUserRole('admin'), deleteBus);
 
 export default router;

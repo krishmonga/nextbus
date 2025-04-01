@@ -1,14 +1,17 @@
-import { Navigate } from 'react-router-dom'
-import { useAuthStore } from '../stores/authStore'
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuthStore } from '../stores/authStore';
 
 const ProtectedRoute = ({ children }) => {
-  const { user } = useAuthStore()
-  
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-  
-  return children
-}
+  const { user, setRedirectPath } = useAuthStore();
+  const location = useLocation();
 
-export default ProtectedRoute
+  if (!user) {
+    // Store the current path before redirecting to login
+    setRedirectPath(location.pathname + location.search);
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  return children;
+};
+
+export default ProtectedRoute;
