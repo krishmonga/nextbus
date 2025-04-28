@@ -33,10 +33,24 @@ function AppRoutes() {
         element={user ? <Navigate to="/dashboard" state={{ from: location }} replace /> : <RegisterPage />} 
       />
       
+      {/* Protected Routes - require authentication */}
+      <Route path="/bus-tracking" element={
+        <ProtectedRoute>
+          <BusTrackingPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/taxi-booking" element={
+        <ProtectedRoute>
+          <TaxiBookingPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/carpool" element={
+        <ProtectedRoute>
+          <CarpoolPage />
+        </ProtectedRoute>
+      } />
+      
       {/* Public Routes */}
-      <Route path="/bus-tracking" element={<BusTrackingPage />} />
-      <Route path="/taxi-booking" element={<TaxiBookingPage />} />
-      <Route path="/carpool" element={<CarpoolPage />} />
       <Route path="/map" element={<MapPage />} />
       
       {/* Protected User Routes */}
