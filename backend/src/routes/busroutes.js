@@ -1,27 +1,28 @@
-import express from "express";
-import {
-  getBuses,
-  getBusById,
-  addBus,
-  updateBus,
-  deleteBus,
-  checkSeatAvailability
-} from "../controllers/buscontroller.js";  
-import { protect, checkUserRole } from "../middleware/authMiddleware.js";
-import { validateBus } from "../middleware/validationMiddleware.js";
+import express from 'express';
+import { 
+  getAllBuses, 
+  getBusStops, 
+  getBusById, 
+  getBusesNearLocation, 
+  updateBusLocation, 
+  createBus, 
+  createBusStop 
+} from '../controllers/buscontroller.js';
+import { protect, admin } from '../middleware/authmiddleware.js';
 
 const router = express.Router();
 
 // Public routes
-router.get("/", getBuses);
-router.get("/:id", getBusById);
+router.get('/all', getAllBuses);
+router.get('/stops', getBusStops);
+router.get('/nearby', getBusesNearLocation);
+router.get('/:id', getBusById);
 
-// Protected routes
-router.get("/availability", protect, checkSeatAvailability);
+// Protected routes (require authentication)
+router.post('/location', protect, updateBusLocation);
 
-// Admin-only routes
-router.post("/", protect, checkUserRole('admin'), validateBus, addBus);
-router.put("/:id", protect, checkUserRole('admin'), validateBus, updateBus);
-router.delete("/:id", protect, checkUserRole('admin'), deleteBus);
+// Admin routes
+router.post('/', protect, admin, createBus);
+router.post('/stops', protect, admin, createBusStop);
 
 export default router;

@@ -1,237 +1,349 @@
-import React, { useState, useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { Icon, divIcon } from 'leaflet';
+import { useSearchParams } from 'react-router-dom';
+import { useBusStore } from '../stores/busstore';
+import { useGeolocation } from '../hooks/usegeolocation';
+import toast from 'react-hot-toast';
+import 'leaflet/dist/leaflet.css';
 
-const containerStyle = {
-  width: '100%',
-  height: '600px'
+// Custom icons for map markers
+const busIcon = new Icon({
+  iconUrl: '/icons/bus-marker.png',
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32]
+});
+
+const busStopIcon = new Icon({
+  iconUrl: '/icons/bus-stop.png',
+  iconSize: [24, 24],
+  iconAnchor: [12, 24],
+  popupAnchor: [0, -24]
+});
+
+const userIcon = new Icon({
+  iconUrl: '/icons/user-location.png',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+  popupAnchor: [0, -11]
+});
+
+// Create a clustered bus icon with route number
+const createBusClusterIcon = (route) => {
+  return divIcon({
+    html: `<div class="bus-cluster">${route}</div>`,
+    className: 'custom-bus-cluster',
+    iconSize: [40, 40]
+  });
 };
 
-const MapPage = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { selectedBus, allBuses, busStops } = location.state || {};
-  
-  const [selectedBusState, setSelectedBusState] = useState(selectedBus || null);
-  const [selectedStop, setSelectedStop] = useState(null);
-  const [map, setMap] = useState(null);
-  
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries: ['geometry', 'drawing']
+// Component to follow user location
+const LocationMarker = ({ setUserLocation }) => {
+  const map = useMap();
+  const { coordinates, loaded, error } = useGeolocation({ 
+    enableHighAccuracy: true,
+    watch: true
   });
 
-  const center = selectedBusState?.location || { lat: 31.1048, lng: 77.1734 }; // Default to Shimla if no bus selected
-
-  const onLoad = useCallback((map) => {
-    setMap(map);
-    // Set zoom level to focus on the selected bus
-    if (selectedBusState) {
-      map.panTo(selectedBusState.location);
-      map.setZoom(14);
+  useEffect(() => {
+    if (loaded && coordinates.lat && coordinates.lng && !error) {
+      setUserLocation(coordinates);
+      // Only initially center on user (don't keep re-centering)
+      if (!map.userLocationInitialized) {
+        map.flyTo([coordinates.lat, coordinates.lng], 14);
+        map.userLocationInitialized = true;
+      }
     }
-  }, [selectedBusState]);
+  }, [coordinates, loaded, error, map, setUserLocation]);
 
-  const onUnmount = useCallback(() => {
-    setMap(null);
-  }, []);
-
-  const handleGoBack = () => {
-    navigate(-1); // Go back to previous page
-  };
-
-  const busOperators = [
-    { id: 'hrtc', name: 'HRTC', color: '#34D399' },
-    { id: 'private', name: 'Private Operators', color: '#F87171' },
-    { id: 'local', name: 'Local Buses', color: '#60A5FA' },
-    { id: 'juit', name: 'JUIT', color: '#A78BFA' }
-  ];
-
-  // If no data was passed, provide a message
-  if (!selectedBus || !allBuses || !busStops) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <p className="text-xl text-gray-600 dark:text-gray-300 mb-4">No bus data available.</p>
-        <button
-          onClick={handleGoBack}
-          className="px-4 py-2 font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-        >
-          Go Back
-        </button>
-      </div>
-    );
+  if (error || !loaded || !coordinates.lat || !coordinates.lng) {
+    return null;
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Live Bus Tracking
-        </h1>
-        <button
-          onClick={handleGoBack}
-          className="px-4 py-2 font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+    <Marker position={[coordinates.lat, coordinates.lng]} icon={userIcon}>
+      <Popup>
+        <div>
+          <h3 className="font-bold">Your Location</h3>
+          <p>Lat: {coordinates.lat.toFixed(6)}</p>
+          <p>Lng: {coordinates.lng.toFixed(6)}</p>
+        </div>
+      </Popup>
+    </Marker>
+  );
+};
+
+// Auto refresh component
+const AutoRefresh = ({ interval = 30000, onRefresh }) => {
+  useEffect(() => {
+    const timer = setInterval(() => {
+      onRefresh();
+    }, interval);
+    return () => clearInterval(timer);
+  }, [interval, onRefresh]);
+  
+  return null;
+};
+
+// Zoom control component
+const MapController = ({ selectedBusId }) => {
+  const map = useMap();
+  const { buses } = useBusStore();
+  
+  // Focus on selected bus
+  useEffect(() => {
+    if (selectedBusId) {
+      const bus = buses.find(b => b.id === selectedBusId);
+      if (bus) {
+        map.flyTo([bus.location.lat, bus.location.lng], 15);
+      }
+    }
+  }, [selectedBusId, buses, map]);
+  
+  return null;
+};
+
+const MapPage = () => {
+  const [searchParams] = useSearchParams();
+  const selectedBusParam = searchParams.get('bus');
+  const { buses, busStops, fetchBuses, fetchBusStops, isLoading } = useBusStore();
+  const [center] = useState([30.9762, 77.0727]); // Waknaghat area
+  const [showBuses, setShowBuses] = useState(true);
+  const [showStops, setShowStops] = useState(true);
+  const [selectedBusId, setSelectedBusId] = useState(selectedBusParam);
+  const [userLocation, setUserLocation] = useState(null);
+  const [mapInstance, setMapInstance] = useState(null);
+  
+  // Load data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      await Promise.all([
+        fetchBuses(),
+        fetchBusStops()
+      ]);
+    };
+    
+    loadData();
+    
+    // Set up refresh interval
+    const refreshInterval = setInterval(() => {
+      fetchBuses();
+    }, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(refreshInterval);
+  }, [fetchBuses, fetchBusStops]);
+  
+  // Refresh data handler
+  const handleRefresh = useCallback(async () => {
+    try {
+      await fetchBuses();
+      toast.success('Bus locations updated');
+    } catch (error) {
+      toast.error('Failed to update bus locations');
+    }
+  }, [fetchBuses]);
+  
+  // Move to user's location
+  const moveToUserLocation = useCallback(() => {
+    if (mapInstance && userLocation) {
+      mapInstance.flyTo([userLocation.lat, userLocation.lng], 15);
+    } else if (!userLocation) {
+      toast.error('Unable to get your location');
+    }
+  }, [mapInstance, userLocation]);
+
+  return (
+    <div className="relative flex flex-col h-screen">
+      {/* Top controls */}
+      <div className="absolute top-4 left-4 right-4 z-10 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-lg font-bold text-gray-800 dark:text-white">NextBus Live Map</h1>
+          
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="show-buses"
+                checked={showBuses}
+                onChange={() => setShowBuses(!showBuses)}
+                className="mr-2"
+              />
+              <label htmlFor="show-buses" className="text-sm text-gray-700 dark:text-gray-300">Buses</label>
+            </div>
+            
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="show-stops"
+                checked={showStops}
+                onChange={() => setShowStops(!showStops)}
+                className="mr-2"
+              />
+              <label htmlFor="show-stops" className="text-sm text-gray-700 dark:text-gray-300">Stops</label>
+            </div>
+            
+            <button 
+              onClick={handleRefresh}
+              disabled={isLoading}
+              className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 
+                       transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Updating...' : 'Update'}
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      {/* Map container */}
+      <div className="flex-1 z-0">
+        <MapContainer 
+          center={center}
+          zoom={13}
+          style={{ height: "100%", width: "100%" }}
+          whenCreated={setMapInstance}
+          attributionControl={false}
         >
-          Return to Bus List
+          {/* OpenStreetMap tile layer */}
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            maxZoom={19}
+          />
+          
+          {/* User location marker */}
+          <LocationMarker setUserLocation={setUserLocation} />
+          
+          {/* Bus markers */}
+          {showBuses && buses.map(bus => (
+            <Marker 
+              key={bus.id}
+              position={[bus.location.lat, bus.location.lng]}
+              icon={bus.routeNumber ? createBusClusterIcon(bus.routeNumber) : busIcon}
+              eventHandlers={{
+                click: () => {
+                  setSelectedBusId(bus.id);
+                }
+              }}
+            >
+              <Popup>
+                <div className="bus-popup">
+                  <h3 className="font-bold text-lg">{bus.name}</h3>
+                  <p className="font-medium">Route: {bus.route}</p>
+                  <div className="mt-2">
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      bus.status === 'On Time' ? 'bg-green-100 text-green-800' :
+                      bus.status === 'Delayed' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {bus.status}
+                    </span>
+                  </div>
+                  <div className="mt-2">
+                    <p>Next Stop: {bus.nextStop}</p>
+                    <p>ETA: {bus.eta}</p>
+                  </div>
+                  {bus.occupancy !== undefined && (
+                    <div className="mt-2">
+                      <p>Occupancy: {bus.occupancy}/{bus.capacity || 40}</p>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 mt-1 dark:bg-gray-700">
+                        <div 
+                          className="bg-blue-600 h-2.5 rounded-full" 
+                          style={{width: `${(bus.occupancy / (bus.capacity || 40)) * 100}%`}}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+          
+          {/* Bus stop markers */}
+          {showStops && busStops.map(stop => (
+            <Marker 
+              key={stop.id}
+              position={[stop.location.lat, stop.location.lng]}
+              icon={busStopIcon}
+            >
+              <Popup>
+                <div>
+                  <h3 className="font-bold">{stop.name}</h3>
+                  <p className="text-sm mt-1">Routes: {stop.routes.join(", ")}</p>
+                  {stop.facilities && stop.facilities.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs font-medium text-gray-600">Facilities:</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {stop.facilities.map(facility => (
+                          <span key={facility} className="px-2 py-0.5 bg-gray-100 text-gray-800 rounded text-xs">
+                            {facility.replace('_', ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+          
+          <MapController selectedBusId={selectedBusId} />
+          <AutoRefresh interval={30000} onRefresh={handleRefresh} />
+        </MapContainer>
+      </div>
+
+      {/* Bottom controls */}
+      <div className="absolute bottom-4 right-4 z-10 flex">
+        <button 
+          onClick={moveToUserLocation}
+          className="p-2 bg-blue-500 text-white rounded-full shadow-lg hover:bg-blue-600 
+                   transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
+          title="Go to my location"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
         </button>
       </div>
 
-      {selectedBusState && (
-        <div className="mb-6 p-4 border-l-4 card" style={{ 
-          borderLeftColor: busOperators.find(op => op.id === selectedBusState.operator)?.color || '#34D399' 
-        }}>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-semibold">
-              {selectedBusState.name}
-            </h2>
-            <span 
-              className={`px-2 py-1 rounded text-sm ${
-                selectedBusState.status === 'On Time' 
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                  : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-              }`}
-            >
-              {selectedBusState.status}
-            </span>
-          </div>
-          <p className="text-gray-600 dark:text-gray-300 mb-2">
-            <span className="font-medium">Route:</span> {selectedBusState.route}
-          </p>
-          <div className="flex justify-between items-center text-sm">
-            <span>Next Stop: {selectedBusState.nextStop}</span>
-            <span>ETA: {selectedBusState.eta}</span>
+      {/* CSS for bus clusters */}
+      <style jsx>{`
+        .bus-cluster {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 36px;
+          height: 36px;
+          background-color: #3b82f6;
+          color: white;
+          border-radius: 50%;
+          font-weight: bold;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          border: 2px solid white;
+        }
+        
+        .bus-popup {
+          min-width: 180px;
+        }
+        
+        /* Fix Leaflet default icon paths */
+        .leaflet-default-icon-path {
+          background-image: url("https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png");
+        }
+      `}</style>
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center z-20">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg">
+            <div className="flex items-center space-x-3">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-gray-800 dark:text-gray-200">Loading map data...</p>
+            </div>
           </div>
         </div>
       )}
-      
-      <div className="card overflow-hidden mb-6">
-        {isLoaded ? (
-          <GoogleMap
-            mapContainerStyle={containerStyle}
-            center={center}
-            zoom={12}
-            onLoad={onLoad}
-            onUnmount={onUnmount}
-            options={{
-              styles: [
-                {
-                  featureType: "all",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#7c93a3" }]
-                }
-              ],
-              disableDefaultUI: false,
-              zoomControl: true,
-              mapTypeControl: true,
-              scaleControl: true,
-              streetViewControl: true,
-              rotateControl: true,
-              fullscreenControl: true
-            }}
-          >
-            {/* Bus Markers */}
-            {allBuses.map(bus => {
-              const operator = busOperators.find(op => op.id === bus.operator);
-              return (
-                <Marker
-                  key={`bus-${bus.id}`}
-                  position={bus.location}
-                  icon={{
-                    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                    scale: 6,
-                    fillColor: operator.color,
-                    fillOpacity: 1,
-                    strokeWeight: 2,
-                    strokeColor: '#FFFFFF',
-                    rotation: 45
-                  }}
-                  onClick={() => setSelectedBusState(bus)}
-                >
-                  {selectedBusState?.id === bus.id && (
-                    <InfoWindow
-                      position={bus.location}
-                      onCloseClick={() => setSelectedBusState(null)}
-                    >
-                      <div className="p-2">
-                        <h3 className="font-semibold">{bus.name}</h3>
-                        <p className="text-sm">Route: {bus.route}</p>
-                        <p className="text-sm">Next Stop: {bus.nextStop}</p>
-                        <p className="text-sm">ETA: {bus.eta}</p>
-                        <p className="text-sm">Status: {bus.status}</p>
-                      </div>
-                    </InfoWindow>
-                  )}
-                </Marker>
-              );
-            })}
-
-            {/* Bus Stop Markers */}
-            {busStops.map(stop => (
-              <Marker
-                key={`stop-${stop.id}`}
-                position={stop.location}
-                icon={{
-                  url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png'
-                }}
-                onClick={() => setSelectedStop(stop)}
-              >
-                {selectedStop?.id === stop.id && (
-                  <InfoWindow
-                    position={stop.location}
-                    onCloseClick={() => setSelectedStop(null)}
-                  >
-                    <div className="p-2">
-                      <h3 className="font-semibold">{stop.name}</h3>
-                      <p className="text-sm">Routes:</p>
-                      <ul className="text-sm list-disc list-inside">
-                        {stop.routes.map(route => (
-                          <li key={route}>{route}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </InfoWindow>
-                )}
-              </Marker>
-            ))}
-          </GoogleMap>
-        ) : (
-          <div className="h-96 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-            <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        )}
-      </div>
-
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-          Nearby Bus Stops
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {busStops.map(stop => (
-            <div key={stop.id} className="card p-4">
-              <h3 className="font-semibold text-lg mb-2">{stop.name}</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">Available Routes:</p>
-              <ul className="list-disc list-inside text-sm">
-                {stop.routes.map(route => (
-                  <li key={route}>{route}</li>
-                ))}
-              </ul>
-              <button
-                className="mt-3 px-3 py-1 text-white bg-blue-600 rounded hover:bg-blue-700 shadow-sm transition-all duration-300"
-                onClick={() => {
-                  setSelectedStop(stop);
-                  if (map) {
-                    map.panTo(stop.location);
-                    map.setZoom(15);
-                  }
-                }}
-              >
-                View on Map
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };

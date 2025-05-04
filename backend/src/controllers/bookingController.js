@@ -17,15 +17,16 @@ export const bookBus = async (req, res) => {
     const existingBooking = await Booking.findOne({
       bus: busId,
       seatNumber,
-      travelDate
+      travelDate,
+      status: { $ne: "cancelled" }
     });
 
     if (existingBooking) {
-      return res.status(400).json({ message: "Seat already booked" });
+      return res.status(400).json({ message: "This seat is already booked" });
     }
 
-    // Create booking
-    const booking = await Booking.create({
+    // Create new booking
+    const booking = new Booking({
       user: userId,
       bus: busId,
       seatNumber,
@@ -33,42 +34,44 @@ export const bookBus = async (req, res) => {
       status: "confirmed"
     });
 
-    res.status(201).json(booking);
+    await booking.save();
+
+    // Update bus occupancy
+    await Bus.findByIdAndUpdate(busId, {
+      $inc: { occupancy: 1 }
+    });
+
+    res.status(201).json({
+      success: true,
+      booking
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error booking bus:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to book bus"
+    });
   }
 };
 
-// Get user bookings
+// Get user's bookings
 export const getUserBookings = async (req, res) => {
   try {
     const bookings = await Booking.find({ user: req.user.id })
-      .populate('bus', 'busNumber capacity type');
-    res.status(200).json(bookings);
+      .populate('bus', 'name route operator')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: bookings.length,
+      bookings
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Get booking details
-export const getBookingDetails = async (req, res) => {
-  try {
-    const booking = await Booking.findById(req.params.id)
-      .populate('user', 'name email')
-      .populate('bus', 'busNumber capacity type route');
-
-    if (!booking) {
-      return res.status(404).json({ message: "Booking not found" });
-    }
-
-    // Check if user owns the booking or is admin
-    if (booking.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    res.status(200).json(booking);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error fetching bookings:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch bookings"
+    });
   }
 };
 
@@ -81,29 +84,28 @@ export const cancelBooking = async (req, res) => {
       return res.status(404).json({ message: "Booking not found" });
     }
 
-    // Check if user owns the booking or is admin
-    if (booking.user.toString() !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ message: "Not authorized" });
+    // Check if user owns this booking
+    if (booking.user.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized to cancel this booking" });
     }
 
-    // Update booking status
     booking.status = "cancelled";
     await booking.save();
 
-    res.status(200).json({ message: "Booking cancelled successfully" });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+    // Decrement bus occupancy
+    await Bus.findByIdAndUpdate(booking.bus, {
+      $inc: { occupancy: -1 }
+    });
 
-// Get all bookings (admin only)
-export const getAllBookings = async (req, res) => {
-  try {
-    const bookings = await Booking.find()
-      .populate('user', 'name email')
-      .populate('bus', 'busNumber capacity type');
-    res.status(200).json(bookings);
+    res.status(200).json({
+      success: true,
+      message: "Booking cancelled successfully"
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error("Error cancelling booking:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to cancel booking"
+    });
   }
 };

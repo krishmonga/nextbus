@@ -1,35 +1,97 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { useAuthStore } from '../stores/authStore'
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { useAuthStore } from '../stores/authStore';
 
 const RegisterPage = () => {
-  const navigate = useNavigate()
-  const { register: registerUser, loading, error, clearErrors } = useAuthStore()
-  const { register, handleSubmit, watch, formState: { errors } } = useForm()
-  const [showPassword, setShowPassword] = useState(false)
+  const navigate = useNavigate();
+  const { register: registerUser, loading, error, clearErrors } = useAuthStore();
+  const { register, handleSubmit, watch, formState: { errors }, reset } = useForm();
+  const [showPassword, setShowPassword] = useState(false);
+  const [isDriverRegistration, setIsDriverRegistration] = useState(false);
   
-  const password = watch('password', '')
+  const password = watch('password', '');
   
   const onSubmit = async (data) => {
-    clearErrors()
+    clearErrors();
     const userData = {
       firstName: data.firstName,
       lastName: data.lastName,
       email: data.email,
       password: data.password,
-      phone: data.phone
+      phone: data.phone,
+      role: isDriverRegistration ? 'driver' : 'user'
+    };
+    
+    // Add driver-specific fields if registering as a driver
+    if (isDriverRegistration) {
+      userData.driverInfo = {
+        licenseNumber: data.licenseNumber,
+        licenseExpiry: data.licenseExpiry,
+        vehicleId: data.vehicleId,
+        experience: data.experience
+      };
     }
     
-    const success = await registerUser(userData)
+    const success = await registerUser(userData);
     if (success) {
-      navigate('/login')
+      navigate('/login');
     }
-  }
+  };
+
+  const toggleRegistrationType = () => {
+    setIsDriverRegistration(!isDriverRegistration);
+    // Reset form when switching registration types
+    reset({
+      firstName: '',
+      lastName: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      phone: '',
+      terms: false
+    });
+    clearErrors();
+  };
   
   return (
     <div className="max-w-md mx-auto my-10 p-6 card">
-      <h1 className="text-2xl font-bold text-center mb-6">Create an Account</h1>
+      {/* Registration type toggle */}
+      <div className="flex rounded-md overflow-hidden mb-6 bg-gray-100 dark:bg-gray-700">
+        <button 
+          className={`flex-1 py-2 px-4 text-center transition-colors ${!isDriverRegistration ? 
+            'bg-primary-600 text-white' : 
+            'bg-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+          onClick={() => isDriverRegistration && toggleRegistrationType()}
+        >
+          Passenger Registration
+        </button>
+        <button 
+          className={`flex-1 py-2 px-4 text-center transition-colors ${isDriverRegistration ? 
+            'bg-blue-600 text-white' : 
+            'bg-transparent text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+          onClick={() => !isDriverRegistration && toggleRegistrationType()}
+        >
+          Driver Registration
+        </button>
+      </div>
+
+      <h1 className="text-2xl font-bold text-center mb-6">
+        {isDriverRegistration ? 'Create a Driver Account' : 'Create an Account'}
+      </h1>
+      
+      {isDriverRegistration && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md text-blue-800 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-200">
+          <div className="flex items-start">
+            <svg className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm">
+              By registering as a driver, you'll be able to access location sharing features and driver-specific functions. Please provide valid license information.
+            </p>
+          </div>
+        </div>
+      )}
       
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 dark:bg-red-900 dark:text-red-100 dark:border-red-800">
@@ -46,7 +108,8 @@ const RegisterPage = () => {
             <input
               id="firstName"
               type="text"
-              className="input"
+              className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              placeholder="John"
               {...register('firstName', { 
                 required: 'First name is required' 
               })}
@@ -63,7 +126,8 @@ const RegisterPage = () => {
             <input
               id="lastName"
               type="text"
-              className="input"
+              className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              placeholder="Doe"
               {...register('lastName', { 
                 required: 'Last name is required' 
               })}
@@ -81,7 +145,8 @@ const RegisterPage = () => {
           <input
             id="email"
             type="email"
-            className="input"
+            className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            placeholder={isDriverRegistration ? "driver@example.com" : "user@example.com"}
             {...register('email', { 
               required: 'Email is required',
               pattern: {
@@ -102,7 +167,8 @@ const RegisterPage = () => {
           <input
             id="phone"
             type="tel"
-            className="input"
+            className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            placeholder="9876543210"
             {...register('phone', { 
               required: 'Phone number is required',
               pattern: {
@@ -115,6 +181,94 @@ const RegisterPage = () => {
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.phone.message}</p>
           )}
         </div>
+
+        {/* Driver-specific fields */}
+        {isDriverRegistration && (
+          <>
+            <div className="mb-4">
+              <label htmlFor="licenseNumber" className="block text-sm font-medium mb-1">
+                Driver License Number
+              </label>
+              <input
+                id="licenseNumber"
+                type="text"
+                className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                placeholder="HP-1234567890"
+                {...register('licenseNumber', { 
+                  required: 'License number is required'
+                })}
+              />
+              {errors.licenseNumber && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.licenseNumber.message}</p>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <label htmlFor="licenseExpiry" className="block text-sm font-medium mb-1">
+                License Expiry Date
+              </label>
+              <input
+                id="licenseExpiry"
+                type="date"
+                className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                {...register('licenseExpiry', { 
+                  required: 'License expiry date is required'
+                })}
+              />
+              {errors.licenseExpiry && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.licenseExpiry.message}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label htmlFor="vehicleId" className="block text-sm font-medium mb-1">
+                  Vehicle ID/Number
+                </label>
+                <input
+                  id="vehicleId"
+                  type="text"
+                  className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="HP-01-AB-1234"
+                  {...register('vehicleId', { 
+                    required: 'Vehicle ID is required'
+                  })}
+                />
+                {errors.vehicleId && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.vehicleId.message}</p>
+                )}
+              </div>
+              
+              <div>
+                <label htmlFor="experience" className="block text-sm font-medium mb-1">
+                  Driving Experience (Years)
+                </label>
+                <input
+                  id="experience"
+                  type="number"
+                  min="1"
+                  max="50"
+                  className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  placeholder="5"
+                  {...register('experience', { 
+                    required: 'Experience is required',
+                    min: {
+                      value: 1,
+                      message: 'Experience must be at least 1 year'
+                    },
+                    max: {
+                      value: 50,
+                      message: 'Please enter a valid experience'
+                    }
+                  })}
+                />
+                {errors.experience && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.experience.message}</p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
         
         <div className="mb-4">
           <label htmlFor="password" className="block text-sm font-medium mb-1">
@@ -124,7 +278,8 @@ const RegisterPage = () => {
             <input
               id="password"
               type={showPassword ? 'text' : 'password'}
-              className="input pr-10"
+              className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white pr-10"
+              placeholder="••••••••"
               {...register('password', { 
                 required: 'Password is required',
                 minLength: {
@@ -139,8 +294,9 @@ const RegisterPage = () => {
             />
             <button
               type="button"
-              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500"
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 dark:text-gray-400"
               onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? (
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -158,6 +314,9 @@ const RegisterPage = () => {
           {errors.password && (
             <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password.message}</p>
           )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Password must be at least 8 characters with a mix of uppercase, lowercase, numbers, and special characters.
+          </p>
         </div>
         
         <div className="mb-6">
@@ -167,7 +326,8 @@ const RegisterPage = () => {
           <input
             id="confirmPassword"
             type={showPassword ? 'text' : 'password'}
-            className="input"
+            className="input w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            placeholder="••••••••"
             {...register('confirmPassword', { 
               required: 'Please confirm your password',
               validate: value => value === password || 'Passwords do not match'
@@ -200,6 +360,11 @@ const RegisterPage = () => {
                 <Link to="/privacy" className="text-primary-600 hover:text-primary-500 dark:text-primary-400">
                   Privacy Policy
                 </Link>
+                {isDriverRegistration && (
+                  <>, including the <Link to="/driver-terms" className="text-blue-600 hover:text-blue-500 dark:text-blue-400">
+                    Driver Terms of Service
+                  </Link></>
+                )}
               </label>
               {errors.terms && (
                 <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.terms.message}</p>
@@ -210,7 +375,11 @@ const RegisterPage = () => {
         
         <button
           type="submit"
-          className="w-full btn btn-primary"
+          className={`w-full px-4 py-2 font-medium text-white rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+            isDriverRegistration 
+              ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500' 
+              : 'bg-primary-600 hover:bg-primary-700 focus:ring-primary-500'
+          }`}
           disabled={loading}
         >
           {loading ? (
@@ -219,22 +388,40 @@ const RegisterPage = () => {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Creating Account...
+              {isDriverRegistration ? 'Creating Driver Account...' : 'Creating Account...'}
             </div>
-          ) : 'Create Account'}
+          ) : (
+            isDriverRegistration ? 'Create Driver Account' : 'Create Account'
+          )}
         </button>
       </form>
       
       <div className="mt-6 text-center">
         <p className="text-sm text-gray-600 dark:text-gray-400">
           Already have an account?{' '}
-          <Link to="/login" className="text-primary-600 hover:text-primary-500 dark:text-primary-400">
+          <Link to="/login" className={`${isDriverRegistration ? 'text-blue-600 hover:text-blue-500 dark:text-blue-400' : 'text-primary-600 hover:text-primary-500 dark:text-primary-400'}`}>
             Log in
           </Link>
         </p>
       </div>
-    </div>
-  )
-}
 
-export default RegisterPage
+      {isDriverRegistration && (
+        <div className="mt-8 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <h3 className="font-medium text-sm text-gray-800 dark:text-gray-200 mb-2 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Driver Information
+          </h3>
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            By registering as a driver, you're agreeing to share your real-time location while on duty.
+            Your account will need to be verified before you can start accepting rides.
+            All driver information will be kept confidential and used only for verification purposes.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default RegisterPage;

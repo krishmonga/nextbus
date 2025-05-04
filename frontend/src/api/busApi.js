@@ -1,13 +1,43 @@
-import axios from "axios";
+import apiClient from './apiClient';
 
-const API_URL = "http://localhost:5000/api/buses"; 
+// Get all active buses
+export const getAllBuses = async () => {
+  return await apiClient.get('/buses/all');
+};
 
-export const getBuses = async () => {
-  try {
-    const response = await axios.get(API_URL);
-    return response.data;
-  } catch (error) {
-    console.error("Error fetching buses:", error);
-    return [];
-  }
+// Get bus by ID
+export const getBusById = async (id) => {
+  return await apiClient.get(`/buses/${id}`);
+};
+
+// Get all bus stops
+export const getBusStops = async () => {
+  return await apiClient.get('/buses/stops');
+};
+
+// Get buses near a location
+export const getBusesNearLocation = async (latitude, longitude, distance = 5000) => {
+  return await apiClient.get(
+    `/buses/nearby?latitude=${latitude}&longitude=${longitude}&distance=${distance}`
+  );
+};
+
+// Update bus location (for drivers)
+export const updateBusLocation = async (data) => {
+  return await apiClient.post('/buses/location', data);
+};
+
+// For driver to update location
+export const updateDriverLocation = async (data) => {
+  return await apiClient.post('/drivers/location', data);
+};
+
+// Create a new bus (admin only)
+export const createBus = async (data) => {
+  return await apiClient.post('/buses', data);
+};
+
+// Create a new bus stop (admin only)
+export const createBusStop = async (data) => {
+  return await apiClient.post('/buses/stops', data);
 };

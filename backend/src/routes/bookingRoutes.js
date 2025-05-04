@@ -1,26 +1,15 @@
-import express from "express";
+import express from 'express';
 import { 
   bookBus, 
-  getUserBookings,
-  getBookingDetails,
-  cancelBooking,
-  getAllBookings
-} from "../controllers/bookingController.js";
-import { protect, checkUserRole } from "../middleware/authMiddleware.js";
-import { validateBooking } from "../middleware/validationMiddleware.js";
+  getUserBookings, 
+  cancelBooking 
+} from '../controllers/bookingController.js';
+import { protect } from '../middleware/authmiddleware.js';
 
 const router = express.Router();
 
-// Apply protect middleware to all booking routes
-router.use(protect);
-
-// User booking routes
-router.post("/", validateBooking, bookBus);
-router.get("/", getUserBookings);
-router.get("/:id", getBookingDetails);
-router.delete("/:id", cancelBooking);
-
-// Admin-only routes
-router.get("/admin/all", checkUserRole('admin'), getAllBookings);
+router.post('/', protect, bookBus);
+router.get('/', protect, getUserBookings);
+router.put('/:id/cancel', protect, cancelBooking);
 
 export default router;

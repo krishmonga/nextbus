@@ -1,21 +1,17 @@
-import express from "express";
-import {
-  registerUser,
-  loginUser,
-  logoutUser
-} from "../controllers/authcontrollers.js";
-import {
-  validateRegister,
-  validateLogin
-} from "../middleware/validationMiddleware.js";
+import express from 'express';
+import { 
+  register, 
+  login, 
+  getUserProfile, 
+  updateUserProfile 
+} from '../controllers/authcontrollers.js';
+import { protect } from '../middleware/authmiddleware.js';
 
 const router = express.Router();
 
-// Public routes
-router.post("/register", validateRegister, registerUser);
-router.post("/login", validateLogin, loginUser);
-
-// Protected route (placeholder)
-router.post("/logout", logoutUser);
+router.post('/register', register);
+router.post('/login', login);
+router.get('/profile', protect, getUserProfile);
+router.put('/profile', protect, updateUserProfile);
 
 export default router;

@@ -1,401 +1,247 @@
-import React, { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import BusFeedbackForm from './BusFeedbackForm'; // Import the feedback form
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { useBusStore } from '../stores/busstore';
+import { useGeolocation } from '../hooks/usegeolocation';
 
-const busOperators = [
-  { id: 'hrtc', name: 'HRTC', color: '#34D399' },  // Green for HRTC
-  { id: 'private', name: 'Private Operators', color: '#F87171' }, // Red for private
-  { id: 'local', name: 'Local Buses', color: '#60A5FA' },  // Blue for local
-  { id: 'juit', name: 'JUIT', color: '#A78BFA' }  // Purple for JUIT
-];
-
-const busRoutes = [
-  {
-    id: 1,
-    operator: 'hrtc',
-    name: 'Shimla-Manali Express',
-    route: 'Shimla → Mandi → Kullu → Manali',
-    status: 'On Time',
-    nextStop: 'Mandi',
-    eta: '25 min',
-    location: { lat: 31.0782, lng: 77.1789 }
-  },
-  {
-    id: 2,
-    operator: 'hrtc',
-    name: 'Dharamshala-McLeodganj Shuttle',
-    route: 'Dharamshala → McLeodganj',
-    status: 'Delayed',
-    nextStop: 'McLeodganj',
-    eta: '10 min',
-    location: { lat: 32.2190, lng: 76.3234 }
-  },
-  {
-    id: 3,
-    operator: 'private',
-    name: 'Dalhousie Express',
-    route: 'Pathankot → Dalhousie',
-    status: 'On Time',
-    nextStop: 'Dalhousie',
-    eta: '45 min',
-    location: { lat: 32.5389, lng: 75.9704 }
-  },
-  {
-    id: 4,
-    operator: 'local',
-    name: 'Shimla Local',
-    route: 'Mall Road Circuit',
-    status: 'On Time',
-    nextStop: 'Mall Road',
-    eta: '5 min',
-    location: { lat: 31.1048, lng: 77.1734 }
-  },
-  {
-    id: 5,
-    operator: 'hrtc',
-    name: 'Kinnaur Valley Express',
-    route: 'Shimla → Rampur → Kalpa',
-    status: 'On Time',
-    nextStop: 'Rampur',
-    eta: '60 min',
-    location: { lat: 31.4497, lng: 77.6544 }
-  },
-  {
-    id: 6,
-    operator: 'juit',
-    name: 'JUIT-Shimla Shuttle',
-    route: 'JUIT → Shimla',
-    status: 'On Time',
-    nextStop: 'Shimla',
-    eta: '15 min',
-    location: { lat: 31.0065, lng: 77.0650 }
-  },
-  {
-    id: 7,
-    operator: 'juit',
-    name: 'JUIT-Waknaghat Express',
-    route: 'JUIT → Waknaghat',
-    status: 'On Time',
-    nextStop: 'Waknaghat',
-    eta: '5 min',
-    location: { lat: 31.0170, lng: 77.0750 }
-  },
-  {
-    id: 8,
-    operator: 'juit',
-    name: 'JUIT-Solan Connector',
-    route: 'JUIT → Solan',
-    status: 'Delayed',
-    nextStop: 'Solan',
-    eta: '20 min',
-    location: { lat: 30.9500, lng: 77.0800 }
-  }
-];
-
-const busStops = [
-  { id: 1, name: 'Shimla Bus Terminal', location: { lat: 31.1048, lng: 77.1734 }, routes: ['Shimla-Manali Express', 'Kinnaur Valley Express', 'JUIT-Shimla Shuttle'] },
-  { id: 2, name: 'Manali Bus Stand', location: { lat: 32.2396, lng: 77.1887 }, routes: ['Shimla-Manali Express'] },
-  { id: 3, name: 'Dharamshala Bus Stand', location: { lat: 32.2190, lng: 76.3234 }, routes: ['Dharamshala-McLeodganj Shuttle'] },
-  { id: 4, name: 'McLeodganj Bus Stop', location: { lat: 32.2427, lng: 76.3233 }, routes: ['Dharamshala-McLeodganj Shuttle'] },
-  { id: 5, name: 'JUIT Campus', location: { lat: 31.0065, lng: 77.0650 }, routes: ['JUIT-Shimla Shuttle', 'JUIT-Waknaghat Express', 'JUIT-Solan Connector'] },
-  { id: 6, name: 'Waknaghat', location: { lat: 31.0170, lng: 77.0750 }, routes: ['JUIT-Waknaghat Express'] },
-  { id: 7, name: 'Solan Bus Stand', location: { lat: 30.9045, lng: 77.0967 }, routes: ['JUIT-Solan Connector'] }
-];
+const BusCard = ({ bus, onViewMap }) => {
+  // Calculate time ago for last update
+  const getTimeAgo = (timestamp) => {
+    if (!timestamp) return 'Unknown';
+    
+    const now = new Date();
+    const lastUpdate = new Date(timestamp);
+    const diffInMinutes = Math.floor((now - lastUpdate) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Just now';
+    if (diffInMinutes === 1) return '1 minute ago';
+    if (diffInMinutes < 60) return `${diffInMinutes} minutes ago`;
+    
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours === 1) return '1 hour ago';
+    if (diffInHours < 24) return `${diffInHours} hours ago`;
+    
+    return 'Over a day ago';
+  };
+  
+  // Get color for status
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'On Time': return 'bg-green-100 text-green-800';
+      case 'Delayed': return 'bg-yellow-100 text-yellow-800';
+      case 'Out of Service': return 'bg-red-100 text-red-800';
+      case 'Not Started': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-blue-100 text-blue-800';
+    }
+  };
+  
+  // Get color for operator
+  const getOperatorColor = (operator) => {
+    switch (operator) {
+      case 'hrtc': return 'bg-blue-100 text-blue-800';
+      case 'private': return 'bg-purple-100 text-purple-800';
+      case 'local': return 'bg-orange-100 text-orange-800';
+      case 'juit': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+  
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+      <div className="p-4">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
+            {bus.name}
+          </h3>
+          <span className={`px-2 py-1 text-xs rounded-full ${getOperatorColor(bus.operator)}`}>
+            {bus.operator.toUpperCase()}
+          </span>
+        </div>
+        
+        <p className="text-gray-600 dark:text-gray-300">Route: {bus.route}</p>
+        <p className="text-gray-600 dark:text-gray-300">Next Stop: {bus.nextStop}</p>
+        
+        <div className="flex justify-between items-center mt-3">
+          <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(bus.status)}`}>
+            {bus.status}
+          </span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            ETA: {bus.eta}
+          </span>
+        </div>
+        
+        <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          Last updated: {getTimeAgo(bus.lastUpdate)}
+        </div>
+      </div>
+      
+      <div className="bg-gray-50 dark:bg-gray-700 px-4 py-3">
+        <button 
+          onClick={() => onViewMap(bus)}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md
+                    transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          View on Map
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const BusTrackingPage = () => {
-  const navigate = useNavigate();
-  const [selectedOperator, setSelectedOperator] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [bookingBus, setBookingBus] = useState(null);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false); // State for feedback modal
-  const [feedbackBus, setFeedbackBus] = useState(null); // State for the bus being reviewed
-
-  const handleTrackBus = (bus) => {
-    // Navigate to the Map page with bus data
-    navigate('/map', { state: { selectedBus: bus, allBuses: filteredBuses, busStops: busStops } });
+  const { buses, fetchBuses, isLoading } = useBusStore();
+  const [filteredBuses, setFilteredBuses] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedOperator, setSelectedOperator] = useState('all');
+  const { coordinates } = useGeolocation();
+  
+  // Load buses on mount
+  useEffect(() => {
+    fetchBuses();
+  }, []);
+  
+  // Filter buses when search or filter changes
+  useEffect(() => {
+    let result = [...buses];
+    
+    // Filter by search term
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(bus => 
+        bus.name.toLowerCase().includes(term) || 
+        bus.route.toLowerCase().includes(term) ||
+        bus.nextStop.toLowerCase().includes(term)
+      );
+    }
+    
+    // Filter by operator
+    if (selectedOperator !== 'all') {
+      result = result.filter(bus => bus.operator === selectedOperator);
+    }
+    
+    setFilteredBuses(result);
+  }, [buses, searchTerm, selectedOperator]);
+  
+  // Handle view on map button
+  const handleViewMap = (bus) => {
+    // Navigate to map page with this bus centered
+    window.location.href = `/map?bus=${bus.id}`;
   };
-
-  const handleBookBus = (bus) => {
-    setBookingBus(bus);
-    setShowBookingModal(true);
+  
+  // Sort buses by distance if user location is available
+  const sortByDistance = () => {
+    if (!coordinates.lat || !coordinates.lng) return;
+    
+    const busesWithDistance = filteredBuses.map(bus => {
+      const distance = calculateDistance(
+        coordinates.lat, 
+        coordinates.lng, 
+        bus.location.lat, 
+        bus.location.lng
+      );
+      return { ...bus, distance };
+    });
+    
+    setFilteredBuses([...busesWithDistance].sort((a, b) => a.distance - b.distance));
   };
-
-  const closeBookingModal = () => {
-    setShowBookingModal(false);
-    setBookingBus(null);
+  
+  // Calculate distance between two points using Haversine formula
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Radius of the earth in km
+    const dLat = deg2rad(lat2 - lat1);
+    const dLon = deg2rad(lon2 - lon1);
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const d = R * c; // Distance in km
+    return d;
   };
-
-  const handleOpenFeedbackModal = (bus) => {
-    console.log('Opening feedback modal for bus:', bus); 
-    setFeedbackBus(bus); // Set the selected bus
-    setShowFeedbackModal(true); // Show the modal
+  
+  const deg2rad = (deg) => {
+    return deg * (Math.PI/180);
   };
-
-  const closeFeedbackModal = () => {
-    setShowFeedbackModal(false);  
-    setFeedbackBus(null); 
-  };
-
-  const filteredBuses = busRoutes.filter(bus => {
-    const matchesOperator = selectedOperator ? bus.operator === selectedOperator : true;
-    const matchesSearch = searchQuery.toLowerCase() === '' || 
-      bus.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      bus.route.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesOperator && matchesSearch;
-  });
-
+  
   return (
-    <div>
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
-        Himachal Pradesh Bus Tracking
-      </h1>
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Bus Tracking</h1>
       
       <div className="mb-6">
-        <div className="flex flex-wrap gap-4 mb-4">
+        <div className="bg-blue-50 dark:bg-blue-900 p-4 rounded-lg">
+          <h2 className="text-lg font-semibold text-blue-800 dark:text-blue-200 mb-2">
+            Real-time Bus Tracking
+          </h2>
+          <p className="text-blue-600 dark:text-blue-300">
+            Track buses in real time, see their current location, and check estimated arrival times.
+          </p>
+          <Link
+            to="/map"
+            className="mt-3 inline-block bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md
+                      transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            Open Live Map
+          </Link>
+        </div>
+      </div>
+      
+      <div className="mb-6">
+        <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
             <input
               type="text"
-              className="input"
-              placeholder="Search routes or destinations..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by route or bus name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500
+                        dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
           </div>
-          <div>
-            <select
-              className="input"
-              value={selectedOperator}
-              onChange={(e) => setSelectedOperator(e.target.value)}
+          
+          <select
+            value={selectedOperator}
+            onChange={(e) => setSelectedOperator(e.target.value)}
+            className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500
+                      dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          >
+            <option value="all">All Operators</option>
+            <option value="hrtc">HRTC</option>
+            <option value="juit">JUIT</option>
+            <option value="private">Private</option>
+            <option value="local">Local</option>
+          </select>
+          
+          {coordinates.lat && coordinates.lng && (
+            <button 
+              onClick={sortByDistance}
+              className="px-4 py-2 bg-gray-100 text-gray-800 hover:bg-gray-200 rounded-lg
+                        transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500
+                        dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
             >
-              <option value="">All Operators</option>
-              {busOperators.map(operator => (
-                <option key={operator.id} value={operator.id}>{operator.name}</option>
-              ))}
-            </select>
-          </div>
+              Sort by Distance
+            </button>
+          )}
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        {filteredBuses.map(bus => {
-          const operator = busOperators.find(op => op.id === bus.operator);
-          return (
-            <div 
-              key={bus.id} 
-              className="card p-4 border-l-4 transition-transform hover:scale-105"
-              style={{ borderLeftColor: operator.color }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-semibold">{bus.name}</h3>
-                <span 
-                  className={`px-2 py-1 rounded text-sm ${
-                    bus.status === 'On Time' 
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                      : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-                  }`}
-                >
-                  {bus.status}
-                </span>
-              </div>
-              <p className="text-gray-600 dark:text-gray-300 mb-2">{bus.route}</p>
-              <div className="flex justify-between items-center text-sm">
-                <span>Next: {bus.nextStop}</span>
-                <span>ETA: {bus.eta}</span>
-              </div>
-              <div className="flex gap-2 mt-3">
-                <button 
-                  className="flex-1 px-4 py-2 font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-300 shadow-md hover:shadow-blue-400/50"
-                  onClick={() => handleTrackBus(bus)}
-                >
-                  Track Bus
-                </button>
-                <button 
-                  className="flex-1 px-4 py-2 font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-300 shadow-md hover:shadow-green-400/50"
-                  onClick={() => handleBookBus(bus)}
-                >
-                  Book Bus
-                </button>
-                <button
-                  className="flex-1 px-4 py-2 font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition-all duration-300 shadow-md hover:shadow-yellow-400/50"
-                  onClick={() => handleOpenFeedbackModal(bus)}
-                >
-                  Feedback
-                </button>
-              </div>
+      {isLoading ? (
+        <div className="flex justify-center my-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
+      ) : (
+        <>
+          {filteredBuses.length === 0 ? (
+            <div className="text-center my-12 text-gray-600 dark:text-gray-400">
+              <p className="text-lg">No buses found matching your criteria.</p>
+              <p className="mt-2">Try adjusting your search or filters.</p>
             </div>
-          );
-        })}
-      </div>
-      
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-          Bus Schedule
-        </h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-            <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
-              <tr>
-                <th scope="col" className="px-6 py-3">Route</th>
-                <th scope="col" className="px-6 py-3">From</th>
-                <th scope="col" className="px-6 py-3">To</th>
-                <th scope="col" className="px-6 py-3">Departure</th>
-                <th scope="col" className="px-6 py-3">Arrival</th>
-                <th scope="col" className="px-6 py-3">Status</th>
-                <th scope="col" className="px-6 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredBuses.map(bus => (
-                <tr key={bus.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700">
-                  <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                    {bus.name}
-                  </td>
-                  <td className="px-6 py-4">{bus.route.split('→')[0].trim()}</td>
-                  <td className="px-6 py-4">{bus.route.split('→').pop().trim()}</td>
-                  <td className="px-6 py-4">08:00 AM</td>
-                  <td className="px-6 py-4">
-                    {bus.status === 'On Time' ? '10:30 AM' : '10:45 AM'}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      bus.status === 'On Time'
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                        : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-                    }`}>
-                      {bus.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex space-x-2">
-                      <button 
-                        className="px-3 py-1 text-white bg-blue-600 rounded hover:bg-blue-700 shadow-sm hover:shadow-blue-400/50 transition-all duration-300"
-                        onClick={() => handleTrackBus(bus)}
-                      >
-                        Track
-                      </button>
-                      <button 
-                        className="px-3 py-1 text-white bg-green-600 rounded hover:bg-green-700 shadow-sm hover:shadow-green-400/50 transition-all duration-300"
-                        onClick={() => handleBookBus(bus)}
-                      >
-                        Book
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <BusCard key={bus.id} bus={bus} onViewMap={handleViewMap} />
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Booking Modal */}
-      {showBookingModal && bookingBus && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                Book Ticket - {bookingBus.name}
-              </h3>
-              <button 
-                onClick={closeBookingModal}
-                className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-              </button>
             </div>
-            <div className="mb-4">
-              <p className="text-gray-600 dark:text-gray-300 mb-2">
-                <span className="font-semibold">Route:</span> {bookingBus.route}
-              </p>
-              <p className="text-gray-600 dark:text-gray-300 mb-2">
-                <span className="font-semibold">Departure:</span> 08:00 AM
-              </p>
-              <p className="text-gray-600 dark:text-gray-300 mb-4">
-                <span className="font-semibold">Arrival:</span> {bookingBus.status === 'On Time' ? '10:30 AM' : '10:45 AM'}
-              </p>
-            </div>
-            
-            <form>
-              <div className="mb-4">
-                <label htmlFor="passengers" className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
-                  Number of Passengers
-                </label>
-                <select 
-                  id="passengers" 
-                  className="input"
-                  defaultValue="1"
-                >
-                  {[1, 2, 3, 4, 5].map(num => (
-                    <option key={num} value={num}>{num}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-4">
-                <label htmlFor="journeyDate" className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">
-                  Journey Date
-                </label>
-                <input 
-                  type="date" 
-                  id="journeyDate"
-                  className="input" 
-                  defaultValue={new Date().toISOString().split('T')[0]}
-                />
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  type="button"
-                  className="px-4 py-2 font-medium text-white bg-green-600 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-300 shadow-md hover:shadow-green-400/50 flex-1"
-                  onClick={closeBookingModal}
-                >
-                  Book a Bus 
-                </button>
-                <button
-                  type="button"
-                  className="px-4 py-2 font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transition-all duration-300 shadow-md hover:shadow-gray-400/50 flex-1"
-                  onClick={closeBookingModal}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Feedback Modal */}
-      {showFeedbackModal && feedbackBus && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                Feedback for {feedbackBus.name}
-              </h3>
-              <button
-                onClick={closeFeedbackModal}
-                className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  ></path>
-                </svg>
-              </button>
-            </div>
-            <BusFeedbackForm onClose={closeFeedbackModal} feedbackBus={feedbackBus} />
-          </div>
-        </div>
+          )}
+        </>
       )}
     </div>
   );

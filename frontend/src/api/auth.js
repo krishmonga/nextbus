@@ -1,23 +1,27 @@
-import axios from "axios";
+import apiClient from './apiClient';
 
-const API_BASE_URL = "http://localhost:5000/api/auth"; // Update with your backend auth route
-
-// Signup API
-export const signup = async (userData) => {
-  try {
-    const response = await axios.post(`${API_BASE_URL}/register`, userData);
-    return response.data;
-  } catch (error) {
-    throw error.response.data;
-  }
+export const login = async (credentials) => {
+  return await apiClient.post('/auth/login', credentials);
 };
 
-// Login API
-export const login = async (userData) => {
+export const register = async (userData) => {
+  return await apiClient.post('/auth/register', userData);
+};
+
+export const getUserProfile = async () => {
+  return await apiClient.get('/auth/profile');
+};
+
+export const updateUserProfile = async (userData) => {
+  return await apiClient.put('/auth/profile', userData);
+};
+
+export const checkAuth = async () => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/login`, userData);
+    const response = await apiClient.get('/auth/profile');
     return response.data;
   } catch (error) {
-    throw error.response.data;
+    // Token is invalid or expired
+    return null;
   }
 };
