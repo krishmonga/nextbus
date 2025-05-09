@@ -7,6 +7,7 @@ export const useBusStore = create((set, get) => ({
   busStops: [],
   selectedBus: null,
   nearbyBuses: [],
+  routeBuses: [], // Added to store buses for specific routes
   isLoading: false,
   error: null,
   
@@ -140,5 +141,129 @@ export const useBusStore = create((set, get) => ({
       });
       return null;
     }
+  },
+  
+  // Fetch buses on a specific route
+  fetchBusesByRoute: async (origin, destination) => {
+    set({ isLoading: true, error: null });
+    try {
+      // If API endpoint exists, use it
+      if (busApi.getBusesByRoute) {
+        const response = await busApi.getBusesByRoute(origin, destination);
+        const routeBuses = response.data.buses;
+        
+        // Calculate additional ETAs for these buses
+        const busesWithETAs = await Promise.all(routeBuses.map(async (bus) => {
+          // Calculate ETA to destination if not provided
+          if (!bus.etaToDestination && busApi.getBusETA) {
+            try {
+              // Find destination stop coordinates
+              const destStop = get().busStops.find(
+                stop => stop.name.toLowerCase() === destination.toLowerCase()
+              );
+              
+              if (destStop && destStop.location) {
+                const etaResponse = await busApi.getBusETA(
+                  bus.id, 
+                  destStop.location.lat, 
+                  destStop.location.lng
+                );
+                return {
+                  ...bus,
+                  etaToDestination: etaResponse.data.eta
+                };
+              }
+            } catch (error) {
+              console.warn("Could not get ETA for bus:", error);
+            }
+          }
+          return bus;
+        }));
+        
+        set({ 
+          routeBuses: busesWithETAs, 
+          isLoading: false 
+        });
+        return busesWithETAs;
+      } 
+      // Otherwise filter existing buses
+      else {
+        // Filter buses by route
+        const allBuses = get().buses;
+        const filteredBuses = allBuses.filter(bus => {
+          const route = bus.route?.toLowerCase() || '';
+          return route.includes(origin.toLowerCase()) && 
+                 route.includes(destination.toLowerCase());
+        });
+        
+        set({
+          routeBuses: filteredBuses,
+          isLoading: false
+        });
+        
+        return filteredBuses;
+      }
+    } catch (error) {
+      set({ 
+        error: error.response?.data?.message || 'Failed to fetch buses for this route', 
+        isLoading: false 
+      });
+      return [];
+    }
+  },
+
+  // Get ETA for a specific bus
+  getBusETA: async (busId, destLat, destLng) => {
+    if (!busApi.getBusETA) {
+      // Fallback calculation if API doesn't exist
+      const bus = get().buses.find(b => b.id === busId);
+      if (!bus || !bus.location || !destLat || !destLng) return null;
+      
+      // Calculate distance
+      const distance = calculateDistance(
+        bus.location.lat,
+        bus.location.lng,
+        destLat,
+        destLng
+      );
+      
+      // Estimate time (assuming average speed of 30 km/h)
+      const minutes = Math.round((distance / 30) * 60);
+      
+      // Format time
+      if (minutes < 1) return 'Less than 1 minute';
+      if (minutes < 60) return `${minutes} minutes`;
+      
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours} hour${hours > 1 ? 's' : ''} ${mins > 0 ? `${mins} minute${mins !== 1 ? 's' : ''}` : ''}`;
+    }
+    
+    try {
+      const response = await busApi.getBusETA(busId, destLat, destLng);
+      return response.data.eta;
+    } catch (error) {
+      console.warn("Error getting bus ETA:", error);
+      return null;
+    }
   }
 }));
+
+// Helper function for distance calculation
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
+  
+  const R = 6371; // Radius of the earth in km
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c; // Distance in km
+}
+
+function deg2rad(deg) {
+  return deg * (Math.PI/180);
+}

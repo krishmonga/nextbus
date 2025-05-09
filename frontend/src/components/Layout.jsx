@@ -21,8 +21,8 @@ const Layout = ({ children, darkMode, toggleDarkMode }) => {
 
   const userNavigation = [
     { name: "Dashboard", href: "/dashboard" },
-    { name: "Profile", href: "/dashboard/profile" },
-    { name: "Settings", href: "/dashboard/settings" },
+    { name: "Profile", href: "profile" },
+    { name: "Settings", href: "settings" },
   ]
 
   const adminNavigation = [

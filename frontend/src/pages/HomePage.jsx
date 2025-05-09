@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 
 const HomePage = () => {
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
 
   const handleLoginRedirect = (path) => {
@@ -91,29 +91,32 @@ const HomePage = () => {
       </div>
 
       {/* Driver Section - New */}
-      <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-8 mb-12">
-        <div className="md:flex items-center justify-between">
-          <div className="md:w-2/3 mb-6 md:mb-0">
-            <div className="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded-full text-sm font-medium mb-3">
-              For Drivers
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-              Bus Drivers: Share Your Location
-            </h2>
-            <p className="text-gray-600 dark:text-gray-300">
-              Help passengers track your bus in real-time by sharing your location. Easy to use and battery-efficient.
-            </p>
-          </div>
-          <div>
-            <Link 
-              to="/driver" 
-              className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg"
-            >
-              Driver Dashboard →
-            </Link>
-          </div>
+{/* Driver Section - Only show for non-authenticated users */}
+{!user && !isAuthenticated && (
+  <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-8 mb-12">
+    <div className="md:flex items-center justify-between">
+      <div className="md:w-2/3 mb-6 md:mb-0">
+        <div className="inline-block px-3 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded-full text-sm font-medium mb-3">
+          For Drivers
         </div>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Bus Drivers: Share Your Location
+        </h2>
+        <p className="text-gray-600 dark:text-gray-300">
+          Help passengers track your bus in real-time by sharing your location. Easy to use and battery-efficient.
+        </p>
       </div>
+      <div>
+        <Link 
+          to="/driver" 
+          className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg"
+        >
+          Driver Dashboard →
+        </Link>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* App Download Section */}
       <div className="bg-primary-50 dark:bg-gray-800 rounded-lg p-8 mb-12">
@@ -137,50 +140,52 @@ const HomePage = () => {
         </div>
       </div>
 
-      {/* Stats Section */}
-      <div className="text-center mb-12">
-        <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">
-          Why Choose Next Bus?
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-            <div className="text-primary-600 dark:text-primary-400 text-2xl font-bold mb-2">100+</div>
-            <p className="text-gray-600 dark:text-gray-300">Bus routes tracked</p>
-          </div>
-          <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-            <div className="text-primary-600 dark:text-primary-400 text-2xl font-bold mb-2">50K+</div>
-            <p className="text-gray-600 dark:text-gray-300">Active users</p>
-          </div>
-          <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-            <div className="text-primary-600 dark:text-primary-400 text-2xl font-bold mb-2">10K+</div>
-            <p className="text-gray-600 dark:text-gray-300">Taxi rides per month</p>
-          </div>
-          <div className="p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm">
-            <div className="text-primary-600 dark:text-primary-400 text-2xl font-bold mb-2">5K+</div>
-            <p className="text-gray-600 dark:text-gray-300">Carpool matches</p>
-          </div>
-        </div>
-      </div>
+     
+       
 
-      {/* CTA Section */}
-      <div className="text-center p-8 bg-gradient-to-r from-primary-500 to-primary-700 text-white rounded-lg mb-12">
-        <h2 className="text-2xl font-bold mb-4">Ready to get started?</h2>
-        <p className="mb-6 max-w-2xl mx-auto">Join thousands of users who rely on Next Bus for their daily commute.</p>
-        <div className="flex flex-wrap justify-center gap-4">
-          <button 
-            onClick={() => navigate('/register')}
-            className="px-6 py-3 bg-white text-primary-700 hover:bg-gray-100 rounded-lg transition-all shadow-lg hover:shadow-xl"
-          >
-            Sign Up Free
-          </button>
-          <button 
-            onClick={() => navigate('/bus-tracking')}
-            className="px-6 py-3 bg-primary-800 hover:bg-primary-900 text-white rounded-lg transition-all shadow-lg hover:shadow-xl border border-primary-400"
-          >
-            Try Bus Tracking
-          </button>
+      {/* CTA Section - Only show for non-authenticated users */}
+      {!user && !isAuthenticated && (
+        <div className="text-center p-8 bg-gradient-to-r from-primary-500 to-primary-700 text-white rounded-lg mb-12">
+          <h2 className="text-2xl font-bold mb-4">Ready to get started?</h2>
+          <p className="mb-6 max-w-2xl mx-auto">Join thousands of users who rely on Next Bus for their daily commute.</p>
+          <div className="flex flex-wrap justify-center gap-4">
+            <button 
+              onClick={() => navigate('/register')}
+              className="px-6 py-3 bg-white text-primary-700 hover:bg-gray-100 rounded-lg transition-all shadow-lg hover:shadow-xl"
+            >
+              Sign Up Free
+            </button>
+            <button 
+              onClick={() => navigate('/bus-tracking')}
+              className="px-6 py-3 bg-primary-800 hover:bg-primary-900 text-white rounded-lg transition-all shadow-lg hover:shadow-xl border border-primary-400"
+            >
+              Try Bus Tracking
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Show a different CTA for logged-in users instead */}
+      {user && isAuthenticated && (
+        <div className="text-center p-8 bg-gradient-to-r from-blue-500 to-blue-700 text-white rounded-lg mb-12">
+          <h2 className="text-2xl font-bold mb-4">Welcome back, {user.firstName || user.name || 'valued user'}!</h2>
+          <p className="mb-6 max-w-2xl mx-auto">Check your frequent routes or continue where you left off.</p>
+          <div className="flex flex-wrap justify-center gap-4">
+            <button 
+              onClick={() => navigate('/dashboard')}
+              className="px-6 py-3 bg-white text-blue-700 hover:bg-gray-100 rounded-lg transition-all shadow-lg hover:shadow-xl"
+            >
+              My Dashboard
+            </button>
+            <button 
+              onClick={() => navigate('/bus-tracking')}
+              className="px-6 py-3 bg-blue-800 hover:bg-blue-900 text-white rounded-lg transition-all shadow-lg hover:shadow-xl border border-blue-400"
+            >
+              Track Buses
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

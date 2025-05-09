@@ -41,3 +41,20 @@ export const createBus = async (data) => {
 export const createBusStop = async (data) => {
   return await apiClient.post('/buses/stops', data);
 };
+
+// Get buses by route
+export const getBusesByRoute = async (origin, destination) => {
+  return await apiClient.get(`/buses/route?origin=${origin}&destination=${destination}`);
+};
+
+// Get estimated arrival time for a specific bus to a location
+export const getBusETA = async (busId, destinationLat, destinationLng) => {
+  return await apiClient.get(
+    `/buses/${busId}/eta?lat=${destinationLat}&lng=${destinationLng}`
+  );
+};
+
+// Get estimated arrival time for a bus route
+export const getRouteETA = async (origin, destination) => {
+  return await apiClient.get(`/buses/eta?origin=${origin}&destination=${destination}`);
+};

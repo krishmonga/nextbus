@@ -36,18 +36,13 @@ export const submitFeedback = async (feedbackData) => {
       title: feedbackData.title || `Feedback for ${feedbackData.route || 'trip'}`
     };
 
-    // Correct path - NO /api prefix!
+    // Remove the /api prefix since it's already in the apiClient baseURL
     const response = await apiClient.post('/feedback', formattedData);
 
     console.log('Feedback submitted successfully:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error in feedback submission:', error);
-    
-    // Check for specific error responses
-    if (error.response) {
-      console.error('Server response:', error.response.status, error.response.data);
-    }
     
     // If it's a server error (500), it's not the user's fault
     // We'll still count this as a success with localStorage backup
@@ -74,7 +69,7 @@ export const submitFeedback = async (feedbackData) => {
   }
 };
 
-// Helper function to save feedback to localStorage
+// Helper function stays the same
 const saveFeedbackToLocalStorage = (feedbackData) => {
   try {
     const userFeedback = JSON.parse(localStorage.getItem('userFeedback') || '[]');
@@ -102,9 +97,10 @@ const saveFeedbackToLocalStorage = (feedbackData) => {
   }
 };
 
-// Get user feedback - use correct path without /api prefix
+// Get user feedback - also fix the path
 export const getUserFeedback = async () => {
   try {
+    // Remove the /api prefix
     const response = await apiClient.get('/feedback');
     console.log('Feedback loaded from API:', response.data);
     return response.data;
@@ -117,11 +113,12 @@ export const getUserFeedback = async () => {
   }
 };
 
-// Get feedback for a specific booking - use correct path without /api prefix
+// Get feedback for a specific booking - also fix the path
 export const getFeedbackByBooking = async (bookingId) => {
   if (!bookingId) return { data: null };
   
   try {
+    // Remove the /api prefix
     const response = await apiClient.get(`/feedback/booking/${bookingId}`);
     return response.data;
   } catch (error) {

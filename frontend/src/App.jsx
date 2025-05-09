@@ -10,7 +10,8 @@ import BusTrackingPage from './pages/BusTrackingPage'
 import TaxiBookingPage from './pages/TaxiBookingPage'
 import CarpoolPage from './pages/CarpoolPage'
 import UserDashboardPage from './pages/UserDashboardPage'
-// Import statement fixed - Make sure the path is correct
+import ProfilePage from './pages/ProfilePage';
+import SettingsPage from './pages/SettingsPage';
 import DriverDashboardPage from './pages/DriverDashboardPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -18,6 +19,9 @@ import ProtectedRoute from './components/ProtectedRoute'
 import AdminRoute from './components/AdminRoute'
 import MapPage from './pages/MapPage';
 import DriverLocationSender from "./pages/DriverLocationSender";
+import BusFeedbackForm from './pages/Feedbackpage';
+import FeedbackDashboard from './pages/FeedbackDashboard';
+import Loader from './components/Loader';
 
 // Create a driver route protection component
 const DriverRoute = ({ children }) => {
@@ -73,6 +77,17 @@ function AppRoutes() {
           user ? <Navigate to={getRedirectPath()} state={{ from: location }} replace /> : <RegisterPage />
         } 
       />
+      <Route path="/profile" element={
+  <ProtectedRoute>
+    <ProfilePage />
+  </ProtectedRoute>
+} />
+
+<Route path="/settings" element={
+  <ProtectedRoute>
+    <SettingsPage />
+  </ProtectedRoute>
+} />
       
       {/* Protected Routes - require authentication */}
       <Route path="/bus-tracking" element={
@@ -112,7 +127,7 @@ function AppRoutes() {
           <DriverLocationSender />
         </DriverRoute>
       } />
-      {/* Legacy route - redirect to new structure */}
+      {/* Legacy route - redirect to new structure */} 
       <Route path="/driver" element={<Navigate to="/driver/dashboard" replace />} />
       
       {/* Protected Admin Routes */}
@@ -121,6 +136,10 @@ function AppRoutes() {
           <AdminDashboardPage />
         </AdminRoute>
       } />
+      
+      <Route path="/feedback/:bookingId/:busId" element={<BusFeedbackForm />} />
+      <Route path="/feedback" element={<BusFeedbackForm />} />
+      <Route path="/admin/feedback" element={<FeedbackDashboard />} />
       
       {/* Catch-all Route */}
       <Route path="*" element={<NotFoundPage />} />
@@ -135,11 +154,16 @@ function App() {
     window.matchMedia('(prefers-color-scheme: dark)').matches
   );
   const [isLoading, setIsLoading] = useState(true);
+  const [showLoader, setShowLoader] = useState(true);
 
   useEffect(() => {
     const initApp = async () => {
+      setIsLoading(true);
       try {
+        // Try to restore session from localStorage
         await checkAuth();
+      } catch (error) {
+        console.error('Error during auth check:', error);
       } finally {
         setIsLoading(false);
       }
@@ -157,9 +181,22 @@ function App() {
     localStorage.setItem('darkMode', darkMode);
   }, [darkMode]);
 
+  useEffect(() => {
+    // Show loader for at least 5 seconds on initial load
+    const timer = setTimeout(() => {
+      setShowLoader(false);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   const toggleDarkMode = () => {
     setDarkMode(prev => !prev);
   };
+
+  if (showLoader) {
+    return <Loader />;
+  }
 
   if (isLoading) {
     return (
@@ -188,4 +225,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;

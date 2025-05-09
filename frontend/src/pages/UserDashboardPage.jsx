@@ -1,22 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { format } from 'date-fns';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 const UserDashboardPage = () => {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('trips');
+  const location = useLocation();
+
+  // Parse URL parameters for bus booking
+  const queryParams = new URLSearchParams(location.search);
+  const tabFromUrl = queryParams.get('tab');
+  const busIdFromUrl = queryParams.get('busId');
+  const routeIdFromUrl = queryParams.get('routeId');
+  const fromStopFromUrl = queryParams.get('from');
+  const toStopFromUrl = queryParams.get('to');
+
+  // Initialize state variables
+  const [activeTab, setActiveTab] = useState(tabFromUrl === 'booking' ? 'book' : 'trips');
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [bookedTrips, setBookedTrips] = useState([]);
-  const [bookingForm, setBookingForm] = useState({
-    busId: '',
-    journeyDate: format(new Date(), 'yyyy-MM-dd'),
-    passengers: 1,
-    busStopFrom: '',
-    busStopTo: ''
-  });
+  
+  // Add countdown timer state for cancelled bookings
+  const [cancelCountdowns, setCancelCountdowns] = useState({});
+  
+  // Form data for profile
   const [formData, setFormData] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
@@ -24,9 +34,10 @@ const UserDashboardPage = () => {
     phone: user?.phone || '',
     preferredPayment: user?.preferredPayment || 'card'
   });
+  
 
-  // Bus data for booking (this would sync with your BusTrackingPage)
-  const busOptions = [
+  // Convert busOptions to state so we can add dynamic buses
+  const [busOptions, setBusOptions] = useState([
     { id: 1, name: 'Shimla-Manali Express', route: 'Shimla → Mandi → Kullu → Manali', operator: 'hrtc' },
     { id: 2, name: 'Dharamshala-McLeodganj Shuttle', route: 'Dharamshala → McLeodganj', operator: 'local' },
     { id: 3, name: 'Dalhousie Express', route: 'Pathankot → Dalhousie', operator: 'private' },
@@ -35,53 +46,130 @@ const UserDashboardPage = () => {
     { id: 6, name: 'JUIT-Shimla Shuttle', route: 'JUIT → Shimla', operator: 'juit' },
     { id: 7, name: 'JUIT-Waknaghat Express', route: 'JUIT → Waknaghat', operator: 'juit' },
     { id: 8, name: 'JUIT-Solan Connector', route: 'JUIT → Solan', operator: 'juit' }
-  ];
-  
-  // Bus stops based on selected bus
-  const [busStops, setBusStops] = useState([]);
-  
-  // Update bus stops when bus ID changes
-  useEffect(() => {
-    if (bookingForm.busId) {
-      const selectedBus = busOptions.find(bus => bus.id === parseInt(bookingForm.busId));
-      if (selectedBus) {
-        // Generate bus stops based on the route
-        const stops = selectedBus.route.split('→').map(stop => stop.trim());
-        setBusStops(stops);
-        
-        // Reset the from/to stops when bus changes
-        setBookingForm(prev => ({
-          ...prev,
-          busStopFrom: '',
-          busStopTo: ''
-        }));
-      }
-    } else {
-      setBusStops([]);
-    }
-  }, [bookingForm.busId]);
+  ]);
 
-  // Load user's booked trips from localStorage or API on component mount
+  // Set initial booking form with potential values from URL
+  const [bookingForm, setBookingForm] = useState({
+    busId: busIdFromUrl || '',
+    journeyDate: format(new Date(), 'yyyy-MM-dd'),
+    passengers: 1,
+    busStopFrom: fromStopFromUrl ? decodeURIComponent(fromStopFromUrl) : '',
+    busStopTo: toStopFromUrl ? decodeURIComponent(toStopFromUrl) : ''
+  });
+
+  // Initialize bus stops from URL or as empty array
+  const [busStops, setBusStops] = useState([]);
+
+
+  // Load booked trips from localStorage on mount
   useEffect(() => {
     const savedTrips = localStorage.getItem('bookedTrips');
     if (savedTrips) {
-      // Convert date strings back to Date objects
-      const parsedTrips = JSON.parse(savedTrips).map(trip => ({
-        ...trip,
-        departureDate: new Date(trip.departureDate),
-        bookingDate: new Date(trip.bookingDate)
-      }));
-      setBookedTrips(parsedTrips);
+      try {
+        // Parse the saved trips and convert dates back to Date objects
+        const parsedTrips = JSON.parse(savedTrips).map(trip => ({
+          ...trip,
+          departureDate: new Date(trip.departureDate),
+          bookingDate: new Date(trip.bookingDate),
+          cancellationTime: trip.cancellationTime ? new Date(trip.cancellationTime) : null
+        }));
+        setBookedTrips(parsedTrips);
+      } catch (error) {
+        console.error('Error loading booked trips:', error);
+      }
+    }
+
+    // Handle URL parameters for bus booking
+    if ((tabFromUrl === 'booking' || tabFromUrl === 'book') && busIdFromUrl) {
+      // Set active tab to booking
+      setActiveTab('book');
+      
+      // Process bus stops if available
+      if (fromStopFromUrl && toStopFromUrl) {
+        const from = decodeURIComponent(fromStopFromUrl);
+        const to = decodeURIComponent(toStopFromUrl);
+        
+        // Set bus stops for the route - in a real app you would fetch all stops on the route
+        setBusStops([from, to]);
+      }
+      
+      // Make the URL clean by removing parameters
+      navigate(location.pathname, { replace: true });
     }
   }, []);
-
-  // Save booked trips to localStorage when they change
   useEffect(() => {
-    if (bookedTrips.length > 0) {
-      localStorage.setItem('bookedTrips', JSON.stringify(bookedTrips));
+    if (user) {
+      setFormData({
+        firstName: user.firstName || '',
+        lastName: user.lastName || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        preferredPayment: user.preferredPayment || 'card'
+      });
     }
+  }, [user]);
+
+  // Effect to update bus stops when bus is selected
+  useEffect(() => {
+    if (bookingForm.busId && !busStops.length) {
+      // Find the selected bus
+      const selectedBus = busOptions.find(bus => bus.id.toString() === bookingForm.busId.toString());
+      
+      if (selectedBus) {
+        // Split the route by arrow and trim spaces
+        const stops = selectedBus.route.split('→').map(stop => stop.trim());
+        setBusStops(stops);
+      }
+    }
+  }, [bookingForm.busId, busOptions]);
+
+  // Effect to handle countdown timers for cancelled bookings
+  useEffect(() => {
+    // Find all cancelled trips that have a cancellation time
+    const cancelledTrips = bookedTrips.filter(
+      trip => trip.status === 'Cancelled' && trip.cancellationTime
+    );
+    
+    // Don't do anything if there are no cancelled trips
+    if (cancelledTrips.length === 0) return;
+    
+    // Set up counters for each cancelled trip
+    const countdowns = {};
+    cancelledTrips.forEach(trip => {
+      const cancelTime = new Date(trip.cancellationTime).getTime();
+      const remainingTime = Math.max(0, Math.floor((cancelTime + 20000 - Date.now()) / 1000));
+      countdowns[trip.id] = remainingTime;
+    });
+    
+    setCancelCountdowns(countdowns);
+    
+    // Set up interval to update the counters
+    const interval = setInterval(() => {
+      setCancelCountdowns(prev => {
+        const newCountdowns = { ...prev };
+        
+        let anyActive = false;
+        Object.keys(newCountdowns).forEach(tripId => {
+          if (newCountdowns[tripId] > 0) {
+            newCountdowns[tripId] -= 1;
+            anyActive = true;
+          }
+        });
+        
+        // Clear interval if all countdowns are at 0
+        if (!anyActive) {
+          clearInterval(interval);
+        }
+        
+        return newCountdowns;
+      });
+    }, 1000);
+    
+    // Clean up interval
+    return () => clearInterval(interval);
   }, [bookedTrips]);
 
+  // Handler for profile form updates
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -90,6 +178,7 @@ const UserDashboardPage = () => {
     }));
   };
 
+  // Handler for booking form updates
   const handleBookingInputChange = (e) => {
     const { name, value } = e.target;
     setBookingForm(prev => ({
@@ -98,32 +187,132 @@ const UserDashboardPage = () => {
     }));
   };
 
-  const handleProfileUpdate = async (e) => {
+  // Handle profile update submit
+  const handleProfileUpdate = (e) => {
     e.preventDefault();
     setIsLoading(true);
-    // Simulate API call
+    
+    // In a real app, you would make an API call to update the user profile
+    // For now, we'll simulate that with a timeout
     setTimeout(() => {
-      // Update user data in store (would be handled by your auth store)
+      // Update the user in the auth store
+      // This assumes you have an updateUser function in your authStore
+      useAuthStore.getState().updateUser({
+        ...user,
+        ...formData
+      });
+      
       setIsLoading(false);
       setIsEditing(false);
-      // Show success message
-      alert('Profile updated successfully!');
+      toast.success('Profile updated successfully!');
     }, 1000);
   };
 
+  // Navigate to bus tracking for a specific bus
+  const navigateToBusTracking = (busId) => {
+    navigate(`/bus-tracking?busId=${busId}`);
+  };
+
+  // Cancel a booking with improved state management
+  const cancelBooking = (tripId) => {
+    if (window.confirm('Are you sure you want to cancel this booking?')) {
+      // Use functional state update to ensure we have the latest state
+      setBookedTrips(currentTrips => {
+        // First change status to 'Cancelled'
+        const updatedTrips = currentTrips.map(trip => 
+          trip.id === tripId ? { 
+            ...trip, 
+            status: 'Cancelled',
+            cancellationTime: new Date() // Add cancellation timestamp
+          } : trip
+        );
+        
+        // Update localStorage
+        localStorage.setItem('bookedTrips', JSON.stringify(updatedTrips));
+        
+        // Return updated trips
+        return updatedTrips;
+      });
+      
+      // Start countdown
+      setCancelCountdowns(prev => ({
+        ...prev,
+        [tripId]: 20 // 20 seconds
+      }));
+      
+      toast.success('Booking cancelled successfully. It will be removed in 20 seconds.');
+      
+      // Schedule removal after 20 seconds
+      setTimeout(() => {
+        setBookedTrips(currentTrips => {
+          // Filter out the cancelled trip
+          const filteredTrips = currentTrips.filter(trip => trip.id !== tripId);
+          
+          // Update localStorage
+          localStorage.setItem('bookedTrips', JSON.stringify(filteredTrips));
+          
+          // Return filtered trips
+          return filteredTrips;
+        });
+        
+        toast.info('Cancelled booking has been removed from your trips.');
+      }, 20000); // 20 seconds
+    }
+  };
+  const clearAllBookings = () => {
+    if (window.confirm('Are you sure you want to delete all your bookings? This action cannot be undone.')) {
+      // Clear bookings from state
+      setBookedTrips([]);
+      
+      // Clear from localStorage
+      localStorage.removeItem('bookedTrips');
+      
+      // Show success message
+      toast.success('All bookings have been cleared');
+    }
+  };
+
+  // Download ticket as PDF
+  const downloadTicket = (trip) => {
+    // Generate a simple text ticket and trigger download
+    const ticketContent = `
+      Ticket for ${trip.busName}
+      Route: ${trip.from} → ${trip.to}
+      Journey Date: ${format(trip.departureDate, 'MMM dd, yyyy')}
+      Passengers: ${trip.passengers}
+      Ticket Number: ${trip.ticketNumber}
+    `;
+    const blob = new Blob([ticketContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ticket_${trip.ticketNumber}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Handle booking submission
   const handleBookBus = (e) => {
     e.preventDefault();
     setIsLoading(true);
     
     // Get selected bus details
-    const selectedBus = busOptions.find(bus => bus.id === parseInt(bookingForm.busId));
+    const selectedBus = busOptions.find(bus => bus.id.toString() === bookingForm.busId.toString());
+    
+    if (!selectedBus) {
+      toast.error('Please select a valid bus');
+      setIsLoading(false);
+      return;
+    }
     
     // Create new booking
     const newBooking = {
       id: `trip-${Date.now()}`,
-      busId: parseInt(bookingForm.busId),
+      busId: bookingForm.busId,
       busName: selectedBus.name,
-      route: selectedBus.route,
+      route: `${bookingForm.busStopFrom} → ${bookingForm.busStopTo}`,
       operator: selectedBus.operator,
       departureDate: new Date(bookingForm.journeyDate),
       bookingDate: new Date(),
@@ -132,16 +321,22 @@ const UserDashboardPage = () => {
       passengers: parseInt(bookingForm.passengers),
       status: 'Confirmed',
       ticketNumber: `HP-${Date.now().toString().substring(7)}`,
-      paymentMethod: formData.preferredPayment || 'card',
-      price: parseInt(bookingForm.passengers) * 250
+      paymentMethod: formData.preferredPayment || 'card'
     };
     
-    // Add booking to state
+    // Simulating API call
     setTimeout(() => {
-      setBookedTrips(prev => [newBooking, ...prev]);
+      // Add to booked trips
+      const updatedTrips = [newBooking, ...bookedTrips];
+      setBookedTrips(updatedTrips);
+      
+      // Save to localStorage
+      localStorage.setItem('bookedTrips', JSON.stringify(updatedTrips));
+      
       setIsLoading(false);
-      setActiveTab('trips');
-      // Reset booking form
+      toast.success('Ticket booked successfully!');
+      
+      // Reset form and navigate to trips tab
       setBookingForm({
         busId: '',
         journeyDate: format(new Date(), 'yyyy-MM-dd'),
@@ -149,97 +344,18 @@ const UserDashboardPage = () => {
         busStopFrom: '',
         busStopTo: ''
       });
+      setActiveTab('trips');
     }, 1000);
   };
 
-  const cancelBooking = (tripId) => {
-    // Show confirmation dialog
-    if (window.confirm('Are you sure you want to cancel this booking?')) {
-      setIsLoading(true);
-      // Simulate API call to cancel booking
-      setTimeout(() => {
-        setBookedTrips(prev => 
-          prev.map(trip => 
-            trip.id === tripId 
-              ? {...trip, status: 'Cancelled'} 
-              : trip
-          )
-        );
-        setIsLoading(false);
-      }, 500);
-    }
+  // Function to check if a trip is completed (departure date is in the past)
+  const isTripCompleted = (trip) => {
+    return new Date(trip.departureDate) < new Date();
   };
 
-  // Navigate to bus tracking page with the selected bus data
-  const navigateToBusTracking = (busId) => {
-    const selectedBus = busOptions.find(bus => bus.id === busId);
-    if (selectedBus) {
-      navigate('/map', { 
-        state: { 
-          selectedBus: {
-            id: selectedBus.id,
-            name: selectedBus.name,
-            route: selectedBus.route,
-            operator: selectedBus.operator,
-            location: { lat: 31.1048, lng: 77.1734 }, // Placeholder, would come from API
-            status: 'On Time',
-            nextStop: busStops[1] || 'Unknown',
-            eta: '10 minutes'
-          },
-          allBuses: busOptions.map(bus => ({
-            id: bus.id,
-            name: bus.name,
-            route: bus.route,
-            operator: bus.operator,
-            location: { 
-              lat: 31.1048 + (Math.random() * 0.05), 
-              lng: 77.1734 + (Math.random() * 0.05) 
-            },
-            status: Math.random() > 0.3 ? 'On Time' : 'Delayed',
-            nextStop: 'Next Stop',
-            eta: `${Math.floor(Math.random() * 30) + 5} minutes`
-          })),
-          busStops: busStops.map((stop, index) => ({
-            id: `stop-${index}`,
-            name: stop,
-            location: { 
-              lat: 31.1048 + (Math.random() * 0.05), 
-              lng: 77.1734 + (Math.random() * 0.05) 
-            },
-            routes: [selectedBus.route]
-          }))
-        }
-      });
-    }
-  };
-
-  // Function to generate and download ticket
-  const downloadTicket = (trip) => {
-    // Create ticket content
-    const ticketContent = `
-------------------------------------------
-          NEXT BUS TICKET
-------------------------------------------
-Ticket Number: ${trip.ticketNumber}
-Bus: ${trip.busName}
-Route: ${trip.from} → ${trip.to}
-Date: ${format(trip.departureDate, 'MMM dd, yyyy')}
-Passengers: ${trip.passengers}
-Total Amount: ₹${(trip.passengers * 250).toFixed(2)}
-Status: ${trip.status}
-------------------------------------------
-    `;
-    
-    // Create blob and download
-    const blob = new Blob([ticketContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Ticket-${trip.ticketNumber}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  // Function to navigate to feedback page - FIXED to use path parameters instead of query parameters
+  const navigateToFeedback = (tripId, busId) => {
+    navigate(`/feedback/${tripId}/${busId}`);
   };
 
   return (
@@ -248,7 +364,6 @@ Status: ${trip.status}
         User Dashboard
       </h1>
       
-      {/* Loading indicator */}
       {isLoading && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
           <div className="bg-white p-4 rounded-lg shadow-lg">
@@ -308,19 +423,28 @@ Status: ${trip.status}
         </nav>
       </div>
 
-      {/* My Trips Tab */}
       {activeTab === 'trips' && (
         <div>
           <div className="mb-4 flex justify-between items-center">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
               My Booked Trips
             </h2>
-            <button
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              onClick={() => setActiveTab('book')}
-            >
-              Book New Trip
-            </button>
+            <div className="flex gap-2">
+              {bookedTrips.length > 0 && (
+                <button
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                  onClick={clearAllBookings}
+                >
+                  Clear All Bookings
+                </button>
+              )}
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                onClick={() => setActiveTab('book')}
+              >
+                Book New Trip
+              </button>
+            </div>
           </div>
 
           {bookedTrips.length === 0 ? (
@@ -347,15 +471,23 @@ Status: ${trip.status}
                 >
                   <div className="flex justify-between mb-2">
                     <h3 className="text-lg font-semibold">{trip.busName}</h3>
-                    <span 
-                      className={`px-2 py-1 rounded text-sm ${
-                        trip.status === 'Confirmed' 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
-                      }`}
-                    >
-                      {trip.status}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span 
+                        className={`px-2 py-1 rounded text-sm ${
+                          trip.status === 'Confirmed' 
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+                        }`}
+                      >
+                        {trip.status}
+                      </span>
+                      {/* Display countdown for cancelled bookings */}
+                      {trip.status === 'Cancelled' && cancelCountdowns[trip.id] !== undefined && (
+                        <span className="text-xs font-medium text-red-600 dark:text-red-400 animate-pulse">
+                          Removing in {cancelCountdowns[trip.id]}s
+                        </span>
+                      )}
+                    </div>
                   </div>
                   
                   <p className="text-gray-600 dark:text-gray-300 mb-2">
@@ -414,6 +546,17 @@ Status: ${trip.status}
                     >
                       Download Ticket
                     </button>
+                    
+                    {/* Improved feedback button for completed trips with consistent styling */}
+                    {isTripCompleted(trip) && (
+                      <button 
+                        className="flex-1 px-4 py-2 font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-300"
+                        onClick={() => navigateToFeedback(trip.id, trip.busId)}
+                        title="Leave feedback for this trip"
+                      >
+                        Leave Feedback
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -422,7 +565,6 @@ Status: ${trip.status}
         </div>
       )}
 
-      {/* Profile Tab */}
       {activeTab === 'profile' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <div className="mb-4 flex justify-between items-center">
@@ -547,7 +689,6 @@ Status: ${trip.status}
         </div>
       )}
 
-      {/* Payment Tab */}
       {activeTab === 'payment' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
@@ -595,6 +736,55 @@ Status: ${trip.status}
               Add New Payment Method
             </button>
           </div>
+          <div className="mt-6">
+            <h3 className="text-lg font-medium mb-3">Recent Bookings</h3>
+            <div className="space-y-4">
+              {bookedTrips.map((booking) => (
+                <div key={booking.id} className="bg-white p-4 rounded-lg shadow">
+                  {/* Booking info display */}
+                  <div className="flex justify-between mb-2">
+                    <h4 className="font-medium">{booking.busName}</h4>
+                    <span className={`px-2 py-1 rounded text-xs ${
+                      booking.status === 'Confirmed' 
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {booking.status}
+                    </span>
+                  </div>
+
+                  <p className="text-sm text-gray-600 mb-2">
+                    {format(booking.departureDate, 'MMM dd, yyyy')} · {booking.from} → {booking.to}
+                  </p>
+                  
+                  {/* FIXED: Add feedback link with proper path parameter routing */}
+                  {new Date(booking.departureDate) < new Date() && (
+                    <>
+                      <div className="mt-2">
+                        <Link
+                          to={`/feedback/${booking.id}/${booking.busId}`}
+                          className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          <svg className="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          Leave Feedback
+                        </Link>
+                      </div>
+                      <div className="mt-4">
+                        <button
+                          onClick={() => navigate('/feedback')}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                        >
+                          Give General Feedback
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
           
           <div>
             <h3 className="text-lg font-semibold mb-3">Payment History</h3>
@@ -629,6 +819,11 @@ Status: ${trip.status}
                           }`}>
                             {trip.status === 'Confirmed' ? 'Paid' : 'Refunded'}
                           </span>
+                          {trip.status === 'Cancelled' && cancelCountdowns[trip.id] !== undefined && (
+                            <span className="ml-2 text-xs text-red-600 dark:text-red-400">
+                              ({cancelCountdowns[trip.id]}s)
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -640,7 +835,6 @@ Status: ${trip.status}
         </div>
       )}
 
-      {/* Book a Ride Tab */}
       {activeTab === 'book' && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
@@ -756,7 +950,7 @@ Status: ${trip.status}
                   <div>
                     <p className="text-sm text-gray-500 dark:text-gray-400">Bus</p>
                     <p className="font-medium">
-                      {busOptions.find(b => b.id === parseInt(bookingForm.busId))?.name || ''}
+                      {busOptions.find(b => b.id.toString() === bookingForm.busId.toString())?.name || ''}
                     </p>
                   </div>
                   <div>
@@ -764,7 +958,7 @@ Status: ${trip.status}
                     <p className="font-medium">
                       {bookingForm.busStopFrom && bookingForm.busStopTo 
                         ? `${bookingForm.busStopFrom} → ${bookingForm.busStopTo}`
-                        : busOptions.find(b => b.id === parseInt(bookingForm.busId))?.route || ''}
+                        : busOptions.find(b => b.id.toString() === bookingForm.busId.toString())?.route || ''}
                     </p>
                   </div>
                   <div>

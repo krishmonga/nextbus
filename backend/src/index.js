@@ -6,6 +6,7 @@ import authRoutes from './routes/authroutes.js';
 import busRoutes from './routes/busroutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import driverRoutes from './routes/driverRoutes.js';
+import feedbackRoutes from './routes/feedbackroutes.js';
 import { errorHandler } from './middleware/errorMiddleware.js';
 
 // Load environment variables
@@ -25,6 +26,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/buses", busRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/drivers", driverRoutes);
+app.use("/api/feedback", feedbackRoutes);
 
 // Error handler middleware
 app.use(errorHandler);

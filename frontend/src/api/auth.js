@@ -1,27 +1,38 @@
 import apiClient from './apiClient';
 
-export const login = async (credentials) => {
-  return await apiClient.post('/auth/login', credentials);
+// Authentication API calls
+export const login = (credentials) => {
+  return apiClient.post('/auth/login', credentials);
 };
 
-export const register = async (userData) => {
-  return await apiClient.post('/auth/register', userData);
+export const register = (userData) => {
+  return apiClient.post('/auth/register', userData);
 };
 
-export const getUserProfile = async () => {
-  return await apiClient.get('/auth/profile');
+export const logout = () => {
+  return apiClient.post('/auth/logout');
 };
 
-export const updateUserProfile = async (userData) => {
-  return await apiClient.put('/auth/profile', userData);
+// Add these methods for token verification
+export const verifyToken = () => {
+  return apiClient.get('/auth/verify');
 };
 
-export const checkAuth = async () => {
-  try {
-    const response = await apiClient.get('/auth/profile');
-    return response.data;
-  } catch (error) {
-    // Token is invalid or expired
-    return null;
-  }
+export const getCurrentUser = () => {
+  return apiClient.get('/auth/me');
+};
+
+// Update user profile
+export const updateUser = (userData) => {
+  return apiClient.put('/users/profile', userData);
+};
+
+// Update user settings
+export const updateSettings = (settings) => {
+  return apiClient.put('/users/settings', { settings });
+};
+
+// Change password
+export const changePassword = (passwordData) => {
+  return apiClient.put('/users/password', passwordData);
 };
